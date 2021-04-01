@@ -53,7 +53,7 @@ public class CassandraConnectorContext extends CdcSourceTaskContext {
                     .build();
 
             // Setting up schema holder ...
-            this.schemaHolder = new SchemaHolder(this.cassandraClient, this.config.kafkaTopicPrefix(), this.config.getSourceInfoStructMaker());
+            this.schemaHolder = new SchemaHolder(this.config.kafkaTopicPrefix(), this.config.getSourceInfoStructMaker());
 
             // Setting up a file-based offset manager ...
             this.offsetWriter = new FileOffsetWriter(this.config.offsetBackingStoreDir());
