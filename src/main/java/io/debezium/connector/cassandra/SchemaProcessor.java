@@ -108,8 +108,6 @@ public class SchemaProcessor extends AbstractProcessor {
     public static final class SchemaReinitializer {
         public static synchronized void reinitialize() {
             try {
-                // give it some time to flush system table to disk so we can read them again
-                Thread.sleep(5000);
                 clearWithoutAnnouncing();
                 Schema.instance.loadFromDisk(false);
             }
