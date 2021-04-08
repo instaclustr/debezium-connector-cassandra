@@ -1,0 +1,152 @@
+== Debezium integration with Cassandra report - part 2
+
+_by Stefan Miklosovic / stefan dot miklosovic at instaclustr dot com_
+
+=== Introduction
+
+In this document, we will retrospect what we have actually done in the part 1 and
+we will build on that to improve the solution.
+
+=== Nature of the problem
+
+The problem with solution 1 is that it is not deterministic. The reason for
+non-determinism seems to be the fact that it is more or less unpredictable when
+Cassandra flushes / persists changes, e.g in `cdc = true / false` to disk so our
+refresh of schema will pick these changes up.
+
+Hence we might see the following:
+
+1) A table is created with cdc = true
+2) We detect the change in schema listener of driver and we refresh the schema in Debezium via mechanics of Cassandra
+3) We think that our internal structure is indeed refreshed but our `cdc` is still false.
+
+This means that even Cassandra process is internally aware of the fact that we have
+enabled cdc on a particular table, Debezium does not reflect this because
+sometimes changes are flushed / persisted just fine but sometimes it takes time
+to propagate these changes and it might be too late for Debezium as listener was already invoked.
+
+=== Possible solutions
+
+The are two solutions in general to this problem:
+
+1) Faking what Cassandra does in Debezium to have same data structures too.
+
+This is rather delicate operation / topic to deal with but it is possible and we chose to go with
+this solution for a time being.
+
+It merges two main concepts:
+
+a) Debezium is informed about schema changes via provided schema change listener registered on driver
+b) once a respective method on a listner is invoked, we mock same code what Cassandra would invoke but
+in such a way that the parts which would be errorneous (because Debezium just does not run Cassandra) are
+skipped.
+
+By doing b), we are internally holding a logical copy of what the real Cassandra is holding and we are
+synchronizing Cassandra internal structures (keyspaces, tables ...) by registering
+schema change listener and applying same changes to "Cassandra" in Debezium process.
+
+Lets go through the core of this logic, starting with "onKeyspaceAdded":
+
+[source,java]
+----
+schemaChangeListener = new NoOpSchemaChangeListener() {
+    @Override
+    public void onKeyspaceAdded(final KeyspaceMetadata keyspace) {
+        Schema.instance.setKeyspaceMetadata(org.apache.cassandra.schema.KeyspaceMetadata.create(
+                keyspace.getName(),
+                KeyspaceParams.create(keyspace.isDurableWrites(),
+                        keyspace.getReplication())));
+        Keyspace.openWithoutSSTables(keyspace.getName());
+        logger.info("added keyspace {}", keyspace.asCQLQuery());
+    }
+----
+
+Here we fake that we opened a keyspace. This will populate some internal structures of Cassandra and so on so
+our hot Cassandra code in Debezium "knows" what keyspace was added and so on.
+
+On a keyspace's update, we do:
+
+[source,java]
+----
+@Override
+public void onKeyspaceChanged(KeyspaceMetadata current,
+                              KeyspaceMetadata previous) {
+    Schema.instance.updateKeyspace(current.getName(),
+                                   KeyspaceParams.create(current.isDurableWrites(),
+                                                         current.getReplication()));
+}
+----
+
+When a keyspace is removed, we do:
+
+[source,java]
+----
+@Override
+public void onKeyspaceRemoved(final KeyspaceMetadata keyspace) {
+    schemaHolder.removeKeyspace(keyspace.getName());
+    // here KeyspaceMetadata are of Cassandra, not driver's as in method argument
+    Schema.instance.clearKeyspaceMetadata(KeyspaceMetadata.create(
+            keyspace.getName(),
+            KeyspaceParams.create(keyspace.isDurableWrites(),
+                    keyspace.getReplication())));
+}
+----
+
+We are removing a keyspace from our schema holder too. Think about it, if we removed whole keyspace
+by "DROP KEYSPACE abc", all tables are removed too so we just get rid of all tables of that keyspace
+in our schema holder as well.
+
+We left last three methods of a listener - onTableAdded, onTableChanged and onTableRemoved
+for a reader to go through. The code you see is more or less what Cassandra does internally but
+it is refactored in such a way that parts with are not needed (nor desired to be done) are just skipped.
+
+Please follow this https://github.com/instaclustr/debezium-connector-cassandra/blob/dd2/src/main/java/io/debezium/connector/cassandra/SchemaProcessor.java#L81-L168[link].
+
+Once we put into into the action, metadata will be populated right with `cdc` flag on TableParams and so on.
+`Mutation` will be as well serialised properly because it will reach into ColumnFamily's metadata which
+has `cdc = true` because we were notified about this change in a listener and we updated
+that table in Cassandra code so the following deserialisation of a Mutation where this code
+is called will not throw:
+
+[source,java]
+----
+public static class Serializer
+{
+    public void serialize(CFMetaData metadata, DataOutputPlus out, int version) throws IOException
+    {
+        UUIDSerializer.serializer.serialize(metadata.cfId, out, version);
+    }
+
+    public CFMetaData deserialize(DataInputPlus in, int version) throws IOException
+    {
+        UUID cfId = UUIDSerializer.serializer.deserialize(in, version);
+        CFMetaData metadata = Schema.instance.getCFMetaData(cfId);
+        if (metadata == null)
+        {
+            String message = String.format("Couldn't find table for cfId %s. If a table was just " +
+                    "created, this is likely due to the schema not being fully propagated.  Please wait for schema " +
+                    "agreement on table creation.", cfId);
+            throw new UnknownColumnFamilyException(message, cfId);
+        }
+
+        return metadata;
+    }
+----
+
+Keep in mind that we are not "initialising" Cassandra by any way, when Debezium starts,
+internals of Cassandra will already read tables on the disk and so on so it will be fully running
+but we will never be notified about what happens afterwards (that cdc was changed from false to true, for example). For
+that reason there is a schema change listener which synchronizes it. We might be notified about that via listener, that is true,
+but schema refreshment does not always help and we would end up being notified about changes but we would not have any 
+way to make these changes visible to Cassandra internal's code - only invoking core Cassandra structures and emulating 
+we are running it in a proper Cassandra node will make deserialisation of a mutation possible because previously our 
+cdc flag was always false (was not updating) so the handling of such mutation was effectively skipped.
+
+The second solution consists of making an agent from Debezium - this means that it will see same data structures as Cassandra,
+by definition. The problem with this solution we see is that it is rather tricky to do because
+Debezium would suddenly start to have same lifecycle as Cassandra (or the other way around - Cassandra
+would have same lifecycle as Debezium) - as they are inherently connected together.
+
+Another problem we see is that the dependencies which Debezium uses are not compatible with
+what Cassandra uses and it would be just not possible to "merge it". By merely checking,
+the probability this would be the case is quite high, there is Cassandra connector of
