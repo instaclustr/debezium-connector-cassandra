@@ -48,7 +48,7 @@ import io.debezium.time.Conversions;
 
 /**
  * Handler that implements {@link CommitLogReadHandler} interface provided by Cassandra source code.
- *
+ * <p>
  * This handler implementation processes each {@link Mutation} and invokes one of the registered partition handler
  * for each {@link PartitionUpdate} in the {@link Mutation} (a mutation could have multiple partitions if it is a batch update),
  * which in turn makes one or more record via the {@link RecordMaker} and enqueue the record into the {@link ChangeEventQueue}.
@@ -77,7 +77,7 @@ public class CommitLogReadHandlerImpl implements CommitLogReadHandler {
     }
 
     /**
-     *  A PartitionType represents the type of a PartitionUpdate.
+     * A PartitionType represents the type of a PartitionUpdate.
      */
     enum PartitionType {
         /**
@@ -86,7 +86,7 @@ public class CommitLogReadHandlerImpl implements CommitLogReadHandler {
         PARTITION_KEY_ROW_DELETION,
 
         /**
-         *  a partition-level deletion where partition key + clustering key = primary key
+         * a partition-level deletion where partition key + clustering key = primary key
          */
         PARTITION_AND_CLUSTERING_KEY_ROW_DELETION,
 
@@ -147,7 +147,7 @@ public class CommitLogReadHandlerImpl implements CommitLogReadHandler {
     }
 
     /**
-     *  A RowType represents different types of {@link Row}-level modifications in a Cassandra table.
+     * A RowType represents different types of {@link Row}-level modifications in a Cassandra table.
      */
     enum RowType {
         /**
@@ -303,18 +303,22 @@ public class CommitLogReadHandlerImpl implements CommitLogReadHandler {
      * Handle a valid deletion event resulted from a partition-level deletion by converting Cassandra representation
      * of this event into a {@link Record} object and queue the record to {@link ChangeEventQueue}. A valid deletion
      * event means a partition only has a single row, this implies there are no clustering keys.
-     *
+     * <p>
      * The steps are:
-     *      (1) Populate the "source" field for this event
-     *      (2) Fetch the cached key/value schemas from {@link SchemaHolder}
-     *      (3) Populate the "after" field for this event
-     *          a. populate partition columns
-     *          b. populate regular columns with null values
-     *      (4) Assemble a {@link Record} object from the populated data and queue the record
+     * (1) Populate the "source" field for this event
+     * (2) Fetch the cached key/value schemas from {@link SchemaHolder}
+     * (3) Populate the "after" field for this event
+     * a. populate partition columns
+     * b. populate regular columns with null values
+     * (4) Assemble a {@link Record} object from the populated data and queue the record
      */
     private void handlePartitionDeletion(PartitionUpdate pu, OffsetPosition offsetPosition, KeyspaceTable keyspaceTable) {
 
-        SchemaHolder.KeyValueSchema keyValueSchema = schemaHolder.getOrUpdateKeyValueSchema(keyspaceTable);
+        SchemaHolder.KeyValueSchema keyValueSchema = schemaHolder.getKeyValueSchema(keyspaceTable);
+        if (keyValueSchema == null) {
+            return;
+        }
+
         Schema keySchema = keyValueSchema.keySchema();
         Schema valueSchema = keyValueSchema.valueSchema();
 
@@ -349,27 +353,30 @@ public class CommitLogReadHandlerImpl implements CommitLogReadHandler {
      * Handle a valid event resulted from a row-level modification by converting Cassandra representation of
      * this event into a {@link Record} object and queue the record to {@link ChangeEventQueue}. A valid event
      * implies this must be an insert, update, or delete.
-     *
+     * <p>
      * The steps are:
-     *      (1) Populate the "source" field for this event
-     *      (2) Fetch the cached key/value schemas from {@link SchemaHolder}
-     *      (3) Populate the "after" field for this event
-     *          a. populate partition columns
-     *          b. populate clustering columns
-     *          c. populate regular columns
-     *          d. for deletions, populate regular columns with null values
-     *      (4) Assemble a {@link Record} object from the populated data and queue the record
+     * (1) Populate the "source" field for this event
+     * (2) Fetch the cached key/value schemas from {@link SchemaHolder}
+     * (3) Populate the "after" field for this event
+     * a. populate partition columns
+     * b. populate clustering columns
+     * c. populate regular columns
+     * d. for deletions, populate regular columns with null values
+     * (4) Assemble a {@link Record} object from the populated data and queue the record
      */
     private void handleRowModifications(Row row, RowType rowType, PartitionUpdate pu, OffsetPosition offsetPosition, KeyspaceTable keyspaceTable) {
 
-        SchemaHolder.KeyValueSchema schema = schemaHolder.getOrUpdateKeyValueSchema(keyspaceTable);
-        Schema keySchema = schema.keySchema();
-        Schema valueSchema = schema.valueSchema();
+        SchemaHolder.KeyValueSchema keyValueSchema = schemaHolder.getKeyValueSchema(keyspaceTable);
+        if (keyValueSchema == null) {
+            return;
+        }
+        Schema keySchema = keyValueSchema.keySchema();
+        Schema valueSchema = keyValueSchema.valueSchema();
 
         RowData after = new RowData();
         populatePartitionColumns(after, pu);
         populateClusteringColumns(after, row, pu);
-        populateRegularColumns(after, row, rowType, schema);
+        populateRegularColumns(after, row, rowType, keyValueSchema);
 
         long ts = rowType == DELETE ? row.deletion().time().markedForDeleteAt() : pu.maxTimestamp();
 
