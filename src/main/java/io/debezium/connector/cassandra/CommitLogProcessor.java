@@ -64,6 +64,7 @@ public class CommitLogProcessor extends AbstractProcessor {
             @Override
             void handleEvent(WatchEvent<?> event, Path path) {
                 if (isRunning()) {
+                    SchemaProcessor.SchemaReinitializer.reinitialize();
                     processCommitLog(path.toFile());
                 }
             }

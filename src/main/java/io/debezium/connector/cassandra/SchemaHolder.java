@@ -5,8 +5,6 @@
  */
 package io.debezium.connector.cassandra;
 
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -31,35 +29,20 @@ import io.debezium.connector.cassandra.transforms.CassandraTypeDeserializer;
  * by {@link SchemaProcessor} periodically.
  */
 public class SchemaHolder {
-
     private static final String NAMESPACE = "io.debezium.connector.cassandra";
     private static final Logger LOGGER = LoggerFactory.getLogger(SchemaHolder.class);
 
-    private final Map<KeyspaceTable, KeyValueSchema> tableToKVSchemaMap = new ConcurrentHashMap<>();
+    public final Map<KeyspaceTable, KeyValueSchema> tableToKVSchemaMap = new ConcurrentHashMap<>();
 
-    private final CassandraClient cassandraClient;
-    private final String kafkaTopicPrefix;
-    private final SourceInfoStructMaker sourceInfoStructMaker;
+    public final String kafkaTopicPrefix;
+    public final SourceInfoStructMaker sourceInfoStructMaker;
 
-    public SchemaHolder(CassandraClient cassandraClient, String kafkaTopicPrefix, SourceInfoStructMaker sourceInfoStructMaker) {
-        this.cassandraClient = cassandraClient;
+    public SchemaHolder(String kafkaTopicPrefix, SourceInfoStructMaker sourceInfoStructMaker) {
         this.kafkaTopicPrefix = kafkaTopicPrefix;
         this.sourceInfoStructMaker = sourceInfoStructMaker;
-        refreshSchemas();
-    }
-
-    public void refreshSchemas() {
-        LOGGER.info("Refreshing schemas...");
-        Map<KeyspaceTable, TableMetadata> latest = getLatestTableMetadatas();
-        removeDeletedTableSchemas(latest);
-        createOrUpdateNewTableSchemas(latest);
-        LOGGER.info("Schemas are refreshed");
     }
 
     public KeyValueSchema getOrUpdateKeyValueSchema(KeyspaceTable kt) {
-        if (!tableToKVSchemaMap.containsKey(kt)) {
-            refreshSchema(kt);
-        }
         return tableToKVSchemaMap.getOrDefault(kt, null);
     }
 
@@ -73,7 +56,7 @@ public class SchemaHolder {
     /**
      * Get the schema of an inner field based on the field name
      * @param fieldName the name of the field in the schema
-     * @param schema the schema where the field resides in
+     * @param schema    the schema where the field resides in
      * @return Schema
      */
     public static Schema getFieldSchema(String fieldName, Schema schema) {
@@ -81,48 +64,6 @@ public class SchemaHolder {
             return schema.field(fieldName).schema();
         }
         throw new CassandraConnectorSchemaException("Only STRUCT type is supported for this method, but encountered " + schema.type());
-    }
-
-    private void refreshSchema(KeyspaceTable keyspaceTable) {
-        LOGGER.debug("Refreshing schema for {}", keyspaceTable);
-        TableMetadata existing = tableToKVSchemaMap.containsKey(keyspaceTable) ? tableToKVSchemaMap.get(keyspaceTable).tableMetadata() : null;
-        TableMetadata latest = cassandraClient.getCdcEnabledTableMetadata(keyspaceTable.keyspace, keyspaceTable.table);
-        if (existing != latest) {
-            if (existing == null) {
-                tableToKVSchemaMap.put(keyspaceTable, new KeyValueSchema(kafkaTopicPrefix, latest, sourceInfoStructMaker));
-                LOGGER.debug("Updated schema for {}", keyspaceTable);
-            }
-            if (latest == null) {
-                tableToKVSchemaMap.remove(keyspaceTable);
-                LOGGER.debug("Removed schema for {}", keyspaceTable);
-            }
-        }
-    }
-
-    private Map<KeyspaceTable, TableMetadata> getLatestTableMetadatas() {
-        Map<KeyspaceTable, TableMetadata> latest = new HashMap<>();
-        for (TableMetadata tm : cassandraClient.getCdcEnabledTableMetadataList()) {
-            latest.put(new KeyspaceTable(tm), tm);
-        }
-        return latest;
-    }
-
-    private void removeDeletedTableSchemas(Map<KeyspaceTable, TableMetadata> latestTableMetadataMap) {
-        Set<KeyspaceTable> existingTables = new HashSet<>(tableToKVSchemaMap.keySet());
-        Set<KeyspaceTable> latestTables = latestTableMetadataMap.keySet();
-        existingTables.removeAll(latestTables);
-        tableToKVSchemaMap.keySet().removeAll(existingTables);
-    }
-
-    private void createOrUpdateNewTableSchemas(Map<KeyspaceTable, TableMetadata> latestTableMetadataMap) {
-        latestTableMetadataMap.forEach((table, metadata) -> {
-            TableMetadata existingTableMetadata = tableToKVSchemaMap.containsKey(table) ? tableToKVSchemaMap.get(table).tableMetadata() : null;
-            if (existingTableMetadata == null || !existingTableMetadata.equals(metadata)) {
-                KeyValueSchema keyValueSchema = new KeyValueSchema(kafkaTopicPrefix, metadata, sourceInfoStructMaker);
-                tableToKVSchemaMap.put(table, keyValueSchema);
-                LOGGER.info("Updated schema for {}.", table);
-            }
-        });
     }
 
     public static class KeyValueSchema {
