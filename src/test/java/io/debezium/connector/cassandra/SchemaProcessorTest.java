@@ -7,6 +7,7 @@ package io.debezium.connector.cassandra;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 
 import org.junit.Test;
 
@@ -34,8 +35,7 @@ public class SchemaProcessorTest extends EmbeddedCassandraConnectorTestBase {
 
         schemaProcessor.process();
         assertEquals(0, context.getSchemaHolder().getCdcEnabledTableMetadataSet().size());
-
-        assertNotNull(context.getSchemaHolder().getOrUpdateKeyValueSchema(new KeyspaceTable(TEST_KEYSPACE, "table1")));
+        assertNull(context.getSchemaHolder().getOrUpdateKeyValueSchema(new KeyspaceTable(TEST_KEYSPACE, "table1")));
 
         context.getCassandraClient().execute("ALTER TABLE " + keyspaceTable("table1") + " WITH cdc = true;");
         schemaProcessor.process();

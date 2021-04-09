@@ -18,6 +18,9 @@ import org.slf4j.LoggerFactory;
 
 import com.datastax.driver.core.ColumnMetadata;
 import com.datastax.driver.core.TableMetadata;
+import com.google.common.collect.ArrayListMultimap;
+import com.google.common.collect.Multimap;
+import com.google.common.collect.Multimaps;
 
 import io.debezium.connector.SourceInfoStructMaker;
 import io.debezium.connector.cassandra.exceptions.CassandraConnectorSchemaException;
@@ -33,6 +36,7 @@ public class SchemaHolder {
     private static final Logger LOGGER = LoggerFactory.getLogger(SchemaHolder.class);
 
     public final Map<KeyspaceTable, KeyValueSchema> tableToKVSchemaMap = new ConcurrentHashMap<>();
+    public final Multimap<String, String> keyspaceTableMap = Multimaps.synchronizedListMultimap(ArrayListMultimap.create());
 
     public final String kafkaTopicPrefix;
     public final SourceInfoStructMaker sourceInfoStructMaker;
@@ -42,7 +46,8 @@ public class SchemaHolder {
         this.sourceInfoStructMaker = sourceInfoStructMaker;
     }
 
-    public KeyValueSchema getOrUpdateKeyValueSchema(KeyspaceTable kt) {
+    public synchronized KeyValueSchema getOrUpdateKeyValueSchema(KeyspaceTable kt) {
+        LOGGER.debug("content of tableToKVSchemaMap {}", tableToKVSchemaMap);
         return tableToKVSchemaMap.getOrDefault(kt, null);
     }
 
@@ -51,6 +56,20 @@ public class SchemaHolder {
                 .map(KeyValueSchema::tableMetadata)
                 .filter(tm -> tm.getOptions().isCDC())
                 .collect(Collectors.toSet());
+    }
+
+    public synchronized void remove(KeyspaceTable kst) {
+        tableToKVSchemaMap.remove(kst);
+        keyspaceTableMap.remove(kst.keyspace, kst.table);
+    }
+
+    public synchronized void add(KeyspaceTable kst, KeyValueSchema kvs) {
+        tableToKVSchemaMap.put(kst, kvs);
+        keyspaceTableMap.put(kst.keyspace, kst.table);
+    }
+
+    public synchronized boolean contains(String keyspace, String table) {
+        return keyspaceTableMap.containsEntry(keyspace, table);
     }
 
     /**

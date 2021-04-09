@@ -13,15 +13,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-import org.apache.cassandra.config.Schema;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import com.datastax.driver.core.KeyspaceMetadata;
 import com.datastax.driver.core.SchemaChangeListener;
 import com.datastax.driver.core.TableMetadata;
-
 import io.debezium.connector.SourceInfoStructMaker;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * The schema processor is responsible for periodically
@@ -48,25 +45,50 @@ public class SchemaProcessor extends AbstractProcessor {
         this.sourceInfoStructMaker = schemaHolder.sourceInfoStructMaker;
 
         schemaChangeListener = new NoOpSchemaChangeListener() {
+            /**
+             * We add only tables which are cdc enabled
+             *
+             * @param table table to be added
+             */
             @Override
             public void onTableAdded(final TableMetadata table) {
-                logger.info(String.format("Table %s.%s detected to be added!", table.getKeyspace().getName(), table.getName()));
-                schemaHolder.tableToKVSchemaMap.put(new KeyspaceTable(table),
-                        new SchemaHolder.KeyValueSchema(kafkaTopicPrefix, table, sourceInfoStructMaker));
-                // }
+                if (table.getOptions().isCDC()) {
+                    logger.info(String.format("CDC-enabled table %s.%s detected to be added!", table.getKeyspace().getName(), table.getName()));
+                    schemaHolder.add(new KeyspaceTable(table),
+                            new SchemaHolder.KeyValueSchema(kafkaTopicPrefix, table, sourceInfoStructMaker));
+                }
             }
 
             @Override
             public void onTableRemoved(final TableMetadata table) {
                 logger.info(String.format("Table %s.%s detected to be removed!", table.getKeyspace().getName(), table.getName()));
-                schemaHolder.tableToKVSchemaMap.remove(new KeyspaceTable(table));
+                schemaHolder.remove(new KeyspaceTable(table));
             }
 
+            /**
+             * If a table is changed, it does not mean it's cdc state have to change, there might be just changes in columns ...
+             *
+             * However if cdc is not enabled in the current table, we just need to remove it completely
+             * If cdc is enabled, we just add it (or effectively replace, if it is already there)
+             *
+             * @param current current view of a table schema
+             * @param previous previos view of a table schema
+             */
             @Override
             public void onTableChanged(final TableMetadata current, final TableMetadata previous) {
-                logger.info(String.format("Detected change in %s.%s", current.getKeyspace().getName(), current.getName()));
-                schemaHolder.tableToKVSchemaMap.put(new KeyspaceTable(current),
-                        new SchemaHolder.KeyValueSchema(kafkaTopicPrefix, current, sourceInfoStructMaker));
+                logger.info(String.format("Detected alternation in schema of %s.%s (previous cdc = %s, current cdc = %s)",
+                        current.getKeyspace().getName(),
+                        current.getName(),
+                        previous.getOptions().isCDC(),
+                        current.getOptions().isCDC()));
+
+                if (current.getOptions().isCDC()) {
+                    schemaHolder.add(new KeyspaceTable(current),
+                            new SchemaHolder.KeyValueSchema(kafkaTopicPrefix, current, sourceInfoStructMaker));
+                }
+                else {
+                    schemaHolder.remove(new KeyspaceTable(current));
+                }
             }
         };
     }
@@ -103,27 +125,5 @@ public class SchemaProcessor extends AbstractProcessor {
         cassandraClient.getCluster().unregister(schemaChangeListener);
         logger.info("Clearing cdc keyspace / table map ... ");
         schemaHolder.tableToKVSchemaMap.clear();
-    }
-
-    public static final class SchemaReinitializer {
-        public static synchronized void reinitialize() {
-            try {
-                clearWithoutAnnouncing();
-                Schema.instance.loadFromDisk(false);
-            }
-            catch (final Throwable ex) {
-                logger.info("Error in reinitialization method", ex);
-            }
-        }
-
-        public static synchronized void clearWithoutAnnouncing() {
-            for (String keyspaceName : Schema.instance.getNonSystemKeyspaces()) {
-                org.apache.cassandra.schema.KeyspaceMetadata ksm = Schema.instance.getKSMetaData(keyspaceName);
-                ksm.tables.forEach(view -> Schema.instance.unload(view));
-                // this method does not exist
-                // ksm.views.forEach(view -> Schema.instance.unload(view));
-                Schema.instance.clearKeyspaceMetadata(ksm);
-            }
-        }
     }
 }
