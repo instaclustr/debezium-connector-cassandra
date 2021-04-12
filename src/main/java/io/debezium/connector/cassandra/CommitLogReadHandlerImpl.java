@@ -214,18 +214,9 @@ public class CommitLogReadHandlerImpl implements CommitLogReadHandler {
         }
     }
 
-    private boolean isTrackedByCDC(Mutation mutation) {
-        boolean trackedByCdc = false;
-        for (PartitionUpdate pu : mutation.getPartitionUpdates()) {
-            trackedByCdc |= schemaHolder.contains(pu.metadata().ksName, pu.metadata().cfName);
-        }
-        LOGGER.debug("Tracked by CDC: " + trackedByCdc);
-        return trackedByCdc;
-    }
-
     @Override
     public void handleMutation(Mutation mutation, int size, int entryLocation, CommitLogDescriptor descriptor) {
-        if (!isTrackedByCDC(mutation)) {
+        if (!mutation.trackedByCDC()) {
             return;
         }
 
@@ -323,7 +314,11 @@ public class CommitLogReadHandlerImpl implements CommitLogReadHandler {
      */
     private void handlePartitionDeletion(PartitionUpdate pu, OffsetPosition offsetPosition, KeyspaceTable keyspaceTable) {
 
-        SchemaHolder.KeyValueSchema keyValueSchema = schemaHolder.getOrUpdateKeyValueSchema(keyspaceTable);
+        SchemaHolder.KeyValueSchema keyValueSchema = schemaHolder.getKeyValueSchema(keyspaceTable);
+        if (keyValueSchema == null) {
+            return;
+        }
+
         Schema keySchema = keyValueSchema.keySchema();
         Schema valueSchema = keyValueSchema.valueSchema();
 
@@ -371,14 +366,17 @@ public class CommitLogReadHandlerImpl implements CommitLogReadHandler {
      */
     private void handleRowModifications(Row row, RowType rowType, PartitionUpdate pu, OffsetPosition offsetPosition, KeyspaceTable keyspaceTable) {
 
-        SchemaHolder.KeyValueSchema schema = schemaHolder.getOrUpdateKeyValueSchema(keyspaceTable);
-        Schema keySchema = schema.keySchema();
-        Schema valueSchema = schema.valueSchema();
+        SchemaHolder.KeyValueSchema keyValueSchema = schemaHolder.getKeyValueSchema(keyspaceTable);
+        if (keyValueSchema == null) {
+            return;
+        }
+        Schema keySchema = keyValueSchema.keySchema();
+        Schema valueSchema = keyValueSchema.valueSchema();
 
         RowData after = new RowData();
         populatePartitionColumns(after, pu);
         populateClusteringColumns(after, row, pu);
-        populateRegularColumns(after, row, rowType, schema);
+        populateRegularColumns(after, row, rowType, keyValueSchema);
 
         long ts = rowType == DELETE ? row.deletion().time().markedForDeleteAt() : pu.maxTimestamp();
 

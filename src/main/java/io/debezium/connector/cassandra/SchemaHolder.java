@@ -5,6 +5,9 @@
  */
 package io.debezium.connector.cassandra;
 
+import static java.util.stream.Collectors.toList;
+
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -46,8 +49,7 @@ public class SchemaHolder {
         this.sourceInfoStructMaker = sourceInfoStructMaker;
     }
 
-    public synchronized KeyValueSchema getOrUpdateKeyValueSchema(KeyspaceTable kt) {
-        LOGGER.debug("content of tableToKVSchemaMap {}", tableToKVSchemaMap);
+    public synchronized KeyValueSchema getKeyValueSchema(KeyspaceTable kt) {
         return tableToKVSchemaMap.getOrDefault(kt, null);
     }
 
@@ -58,12 +60,24 @@ public class SchemaHolder {
                 .collect(Collectors.toSet());
     }
 
-    public synchronized void remove(KeyspaceTable kst) {
+    public synchronized void removeKeyspace(String keyspace) {
+        final List<KeyspaceTable> collect = tableToKVSchemaMap.keySet()
+                .stream()
+                .filter(keyValueSchema -> keyValueSchema.keyspace.equals(keyspace))
+                .collect(toList());
+
+        collect.forEach(tableToKVSchemaMap::remove);
+        collect.forEach(collected -> keyspaceTableMap.removeAll(collected.keyspace));
+    }
+
+    public synchronized void removeTable(KeyspaceTable kst) {
         tableToKVSchemaMap.remove(kst);
         keyspaceTableMap.remove(kst.keyspace, kst.table);
     }
 
-    public synchronized void add(KeyspaceTable kst, KeyValueSchema kvs) {
+    // there is not "addKeyspace", it is not necessary
+    // as we will ever add a concrete table (with keyspace) but we will also dropping all tables when keyspace is dropped
+    public synchronized void addTable(KeyspaceTable kst, KeyValueSchema kvs) {
         tableToKVSchemaMap.put(kst, kvs);
         keyspaceTableMap.put(kst.keyspace, kst.table);
     }

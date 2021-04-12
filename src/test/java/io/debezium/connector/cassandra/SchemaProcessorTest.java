@@ -7,7 +7,6 @@ package io.debezium.connector.cassandra;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertNull;
 
 import org.junit.Test;
 
@@ -35,12 +34,12 @@ public class SchemaProcessorTest extends EmbeddedCassandraConnectorTestBase {
 
         schemaProcessor.process();
         assertEquals(0, context.getSchemaHolder().getCdcEnabledTableMetadataSet().size());
-        assertNull(context.getSchemaHolder().getOrUpdateKeyValueSchema(new KeyspaceTable(TEST_KEYSPACE, "table1")));
+        assertNotNull(context.getSchemaHolder().getKeyValueSchema(new KeyspaceTable(TEST_KEYSPACE, "table1")));
 
         context.getCassandraClient().execute("ALTER TABLE " + keyspaceTable("table1") + " WITH cdc = true;");
         schemaProcessor.process();
         assertEquals(1, context.getSchemaHolder().getCdcEnabledTableMetadataSet().size());
-        keyValueSchema = context.getSchemaHolder().getOrUpdateKeyValueSchema(new KeyspaceTable(TEST_KEYSPACE, "table1"));
+        keyValueSchema = context.getSchemaHolder().getKeyValueSchema(new KeyspaceTable(TEST_KEYSPACE, "table1"));
         assertNotNull(keyValueSchema);
         expectedKeySchemaName = namespacePrefix + "." + "table1" + "." + "Key";
         assertEquals(expectedKeySchemaName, keyValueSchema.keySchema().name());
@@ -50,14 +49,14 @@ public class SchemaProcessorTest extends EmbeddedCassandraConnectorTestBase {
         schemaProcessor.process();
 
         assertEquals(2, context.getSchemaHolder().getCdcEnabledTableMetadataSet().size());
-        keyValueSchema = context.getSchemaHolder().getOrUpdateKeyValueSchema(new KeyspaceTable(TEST_KEYSPACE, "table1"));
+        keyValueSchema = context.getSchemaHolder().getKeyValueSchema(new KeyspaceTable(TEST_KEYSPACE, "table1"));
         assertNotNull(keyValueSchema);
         expectedKeySchemaName = namespacePrefix + "." + "table1" + "." + "Key";
         assertEquals(expectedKeySchemaName, keyValueSchema.keySchema().name());
         expectedValueSchemaName = namespacePrefix + "." + "table1" + "." + "Value";
         assertEquals(expectedValueSchemaName, keyValueSchema.valueSchema().name());
 
-        keyValueSchema = context.getSchemaHolder().getOrUpdateKeyValueSchema(new KeyspaceTable(TEST_KEYSPACE, "table2"));
+        keyValueSchema = context.getSchemaHolder().getKeyValueSchema(new KeyspaceTable(TEST_KEYSPACE, "table2"));
         assertNotNull(keyValueSchema);
         expectedKeySchemaName = namespacePrefix + "." + "table2" + "." + "Key";
         assertEquals(expectedKeySchemaName, keyValueSchema.keySchema().name());
@@ -68,8 +67,8 @@ public class SchemaProcessorTest extends EmbeddedCassandraConnectorTestBase {
         assertEquals(2, context.getSchemaHolder().getCdcEnabledTableMetadataSet().size());
         TableMetadata expectedTm1 = context.getCassandraClient().getCdcEnabledTableMetadata(TEST_KEYSPACE, "table1");
         TableMetadata expectedTm2 = context.getCassandraClient().getCdcEnabledTableMetadata(TEST_KEYSPACE, "table2");
-        TableMetadata tm1 = context.getSchemaHolder().getOrUpdateKeyValueSchema(new KeyspaceTable(TEST_KEYSPACE, "table1")).tableMetadata();
-        TableMetadata tm2 = context.getSchemaHolder().getOrUpdateKeyValueSchema(new KeyspaceTable(TEST_KEYSPACE, "table2")).tableMetadata();
+        TableMetadata tm1 = context.getSchemaHolder().getKeyValueSchema(new KeyspaceTable(TEST_KEYSPACE, "table1")).tableMetadata();
+        TableMetadata tm2 = context.getSchemaHolder().getKeyValueSchema(new KeyspaceTable(TEST_KEYSPACE, "table2")).tableMetadata();
         assertEquals(expectedTm1, tm1);
         assertEquals(expectedTm2, tm2);
         deleteTestKeyspaceTables();
