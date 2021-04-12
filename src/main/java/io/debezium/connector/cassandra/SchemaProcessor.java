@@ -109,7 +109,7 @@ public class SchemaProcessor extends AbstractProcessor {
                         tableMetadata -> new SchemaHolder.KeyValueSchema(kafkaTopicPrefix, tableMetadata, sourceInfoStructMaker)));
 
         logger.info("Adding cdc-enabled tables {}", cdcTables.keySet().stream().map(KeyspaceTable::toString).collect(joining(",")));
-        schemaHolder.tableToKVSchemaMap.putAll(cdcTables);
+        cdcTables.forEach(schemaHolder::add);
 
         logger.info("Registering schema change listener ...");
         cassandraClient.getCluster().register(schemaChangeListener);
