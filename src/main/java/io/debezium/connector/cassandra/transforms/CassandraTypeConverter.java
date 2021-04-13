@@ -8,6 +8,15 @@ package io.debezium.connector.cassandra.transforms;
 import java.util.HashMap;
 import java.util.Map;
 
+import com.datastax.driver.core.DataType;
+
+import io.debezium.connector.cassandra.transforms.type.converter.BasicTypeConverter;
+import io.debezium.connector.cassandra.transforms.type.converter.ListTypeConverter;
+import io.debezium.connector.cassandra.transforms.type.converter.MapTypeConverter;
+import io.debezium.connector.cassandra.transforms.type.converter.SetTypeConverter;
+import io.debezium.connector.cassandra.transforms.type.converter.TupleTypeConverter;
+import io.debezium.connector.cassandra.transforms.type.converter.TypeConverter;
+import io.debezium.connector.cassandra.transforms.type.converter.UserTypeConverter;
 import org.apache.cassandra.db.marshal.AbstractType;
 import org.apache.cassandra.db.marshal.AsciiType;
 import org.apache.cassandra.db.marshal.BooleanType;
@@ -20,6 +29,7 @@ import org.apache.cassandra.db.marshal.DurationType;
 import org.apache.cassandra.db.marshal.FloatType;
 import org.apache.cassandra.db.marshal.InetAddressType;
 import org.apache.cassandra.db.marshal.Int32Type;
+import org.apache.cassandra.db.marshal.IntegerType;
 import org.apache.cassandra.db.marshal.LongType;
 import org.apache.cassandra.db.marshal.ShortType;
 import org.apache.cassandra.db.marshal.SimpleDateType;
@@ -28,16 +38,6 @@ import org.apache.cassandra.db.marshal.TimeUUIDType;
 import org.apache.cassandra.db.marshal.TimestampType;
 import org.apache.cassandra.db.marshal.UTF8Type;
 import org.apache.cassandra.db.marshal.UUIDType;
-
-import com.datastax.driver.core.DataType;
-
-import io.debezium.connector.cassandra.transforms.type.converter.BasicTypeConverter;
-import io.debezium.connector.cassandra.transforms.type.converter.ListTypeConverter;
-import io.debezium.connector.cassandra.transforms.type.converter.MapTypeConverter;
-import io.debezium.connector.cassandra.transforms.type.converter.SetTypeConverter;
-import io.debezium.connector.cassandra.transforms.type.converter.TupleTypeConverter;
-import io.debezium.connector.cassandra.transforms.type.converter.TypeConverter;
-import io.debezium.connector.cassandra.transforms.type.converter.UserTypeConverter;
 
 public final class CassandraTypeConverter {
 
@@ -71,6 +71,8 @@ public final class CassandraTypeConverter {
         typeMap.put(DataType.Name.TUPLE, new TupleTypeConverter());
         typeMap.put(DataType.Name.UDT, new UserTypeConverter());
         typeMap.put(DataType.Name.UUID, new BasicTypeConverter<>(UUIDType.instance));
+        typeMap.put(DataType.Name.VARINT, new BasicTypeConverter<>(IntegerType.instance));
+        typeMap.put(DataType.Name.VARCHAR, new BasicTypeConverter<>(UTF8Type.instance));
     }
 
     public static AbstractType<?> convert(DataType type) {
