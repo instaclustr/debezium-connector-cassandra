@@ -52,7 +52,6 @@ public class CommitLogProcessorTest extends EmbeddedCassandraConnectorTestBase {
     public void testProcessCommitLogs() throws Exception {
         int commitLogRowSize = 10;
         context.getCassandraClient().execute("CREATE TABLE IF NOT EXISTS " + keyspaceTable("cdc_table") + " (a int, b int, PRIMARY KEY(a)) WITH cdc = true;");
-        // context.getSchemaHolder().refreshSchemas();
 
         // programmatically add insertion and deletion events into commit log, this is because running an 'INSERT' or 'DELETE'
         // cql against the embedded Cassandra does not modify the commit log file on disk.

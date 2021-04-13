@@ -99,10 +99,10 @@ public class SchemaProcessor extends AbstractProcessor {
                     return;
                 }
 
-                final java.util.function.Function<org.apache.cassandra.schema.KeyspaceMetadata, org.apache.cassandra.schema.KeyspaceMetadata> f = ks -> ks
+                final java.util.function.Function<org.apache.cassandra.schema.KeyspaceMetadata, org.apache.cassandra.schema.KeyspaceMetadata> transformationFunction = ks -> ks
                         .withSwapped(ks.tables.with(newCFMetaData));
 
-                org.apache.cassandra.schema.KeyspaceMetadata transformed = f.apply(current);
+                org.apache.cassandra.schema.KeyspaceMetadata transformed = transformationFunction.apply(current);
 
                 Schema.instance.setKeyspaceMetadata(transformed);
                 Schema.instance.load(newCFMetaData);
