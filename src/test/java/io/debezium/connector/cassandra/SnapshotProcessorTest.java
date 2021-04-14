@@ -38,7 +38,6 @@ public class SnapshotProcessorTest extends EmbeddedCassandraConnectorTestBase {
         int tableSize = 5;
         context.getCassandraClient().execute("CREATE TABLE IF NOT EXISTS " + keyspaceTable("cdc_table") + " (a int, b text, PRIMARY KEY(a)) WITH cdc = true;");
         context.getCassandraClient().execute("CREATE TABLE IF NOT EXISTS " + keyspaceTable("cdc_table2") + " (a int, b text, PRIMARY KEY(a)) WITH cdc = true;");
-        // context.getSchemaHolder().refreshSchemas();
 
         for (int i = 0; i < tableSize; i++) {
             context.getCassandraClient().execute("INSERT INTO " + keyspaceTable("cdc_table") + "(a, b) VALUES (?, ?)", i, String.valueOf(i));
@@ -83,7 +82,6 @@ public class SnapshotProcessorTest extends EmbeddedCassandraConnectorTestBase {
 
         int tableSize = 5;
         context.getCassandraClient().execute("CREATE TABLE IF NOT EXISTS " + keyspaceTable("non_cdc_table") + " (a int, b text, PRIMARY KEY(a)) WITH cdc = false;");
-        // context.getSchemaHolder().refreshSchemas();
         for (int i = 0; i < tableSize; i++) {
             context.getCassandraClient().execute("INSERT INTO " + keyspaceTable("non_cdc_table") + "(a, b) VALUES (?, ?)", i, String.valueOf(i));
         }
@@ -108,7 +106,6 @@ public class SnapshotProcessorTest extends EmbeddedCassandraConnectorTestBase {
         when(snapshotProcessor.isRunning()).thenReturn(true);
 
         context.getCassandraClient().execute("CREATE TABLE IF NOT EXISTS " + keyspaceTable("cdc_table") + " (a int, b text, PRIMARY KEY(a)) WITH cdc = true;");
-        // context.getSchemaHolder().refreshSchemas();
 
         ChangeEventQueue<Event> queue = context.getQueue();
         assertEquals(queue.totalCapacity(), queue.remainingCapacity());

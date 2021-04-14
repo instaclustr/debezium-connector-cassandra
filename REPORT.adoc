@@ -1,12 +1,6 @@
-== Doordash / Debezium integration report
+== Debezium integration with Cassandra report - part 1
 
 _by Stefan Miklosovic / stefan dot miklosovic at instaclustr dot com_
-
-=== Introduction
-
-This report delivers the solution to a problem Doordash has with its Debezium integration in their
-Cassandra clusters. In this document, we will disect the problem,
-find the solution, implement it and deliver it to customer.
 
 === Nature of the problem
 
