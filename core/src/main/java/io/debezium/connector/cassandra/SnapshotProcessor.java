@@ -56,7 +56,7 @@ public class SnapshotProcessor extends AbstractProcessor {
     private final CassandraClient cassandraClient;
     private final List<ChangeEventQueue<Event>> queues;
     private final OffsetWriter offsetWriter;
-    private final SchemaHolder schemaHolder;
+    private final AbstractSchemaHolder schemaHolder;
     private final RecordMaker recordMaker;
     private final CassandraConnectorConfig.SnapshotMode snapshotMode;
     private final ConsistencyLevel consistencyLevel;

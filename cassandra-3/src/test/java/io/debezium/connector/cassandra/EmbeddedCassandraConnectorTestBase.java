@@ -77,7 +77,12 @@ public abstract class EmbeddedCassandraConnectorTestBase {
      */
     protected static CassandraConnectorContext generateTaskContext() throws Exception {
         Properties defaults = generateDefaultConfigMap();
-        return new CassandraConnectorContext(new CassandraConnectorConfig(Configuration.from(defaults)));
+        return new CassandraConnectorContext(new CassandraConnectorConfig(Configuration.from(defaults)), new SchemaHolderProvider() {
+            @Override
+            public AbstractSchemaHolder provide(CassandraClient cassandraClient, CassandraConnectorConfig config) {
+                return new SchemaHolder(cassandraClient, config.kafkaTopicPrefix(), config.getSourceInfoStructMaker());
+            }
+        });
     }
 
     /**
@@ -86,7 +91,12 @@ public abstract class EmbeddedCassandraConnectorTestBase {
     protected static CassandraConnectorContext generateTaskContext(Map<String, Object> configs) throws Exception {
         Properties defaults = generateDefaultConfigMap();
         defaults.putAll(configs);
-        return new CassandraConnectorContext(new CassandraConnectorConfig(Configuration.from(defaults)));
+        return new CassandraConnectorContext(new CassandraConnectorConfig(Configuration.from(defaults)), new SchemaHolderProvider() {
+            @Override
+            public AbstractSchemaHolder provide(CassandraClient cassandraClient, CassandraConnectorConfig config) {
+                return new SchemaHolder(cassandraClient, config.kafkaTopicPrefix(), config.getSourceInfoStructMaker());
+            }
+        });
     }
 
     /**

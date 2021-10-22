@@ -6,7 +6,7 @@
 package io.debezium.connector.cassandra;
 
 /**
- * An Event is a single unit that can be enqueued and processed by the {@link QueueProcessor}
+ * An Event is a single unit that can be enqueued and processed by the QueueProcessor
  */
 public interface Event {
     enum EventType {

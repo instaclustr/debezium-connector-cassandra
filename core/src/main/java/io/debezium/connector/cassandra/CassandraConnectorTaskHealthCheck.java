@@ -12,12 +12,14 @@ import com.codahale.metrics.health.HealthCheck;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import io.debezium.connector.cassandra.AbstractCassandraConnectorTask.ProcessorGroup;
+
 public class CassandraConnectorTaskHealthCheck extends HealthCheck {
     private static final ObjectMapper mapper = new ObjectMapper();
-    private final CassandraConnectorTask.ProcessorGroup processorGroup;
+    private final ProcessorGroup processorGroup;
     private final CassandraClient cassandraClient;
 
-    public CassandraConnectorTaskHealthCheck(CassandraConnectorTask.ProcessorGroup processorGroup, CassandraClient cassandraClient) {
+    public CassandraConnectorTaskHealthCheck(ProcessorGroup processorGroup, CassandraClient cassandraClient) {
         this.processorGroup = processorGroup;
         this.cassandraClient = cassandraClient;
     }

@@ -42,7 +42,12 @@ public class CommitLogPostProcessorTest extends EmbeddedCassandraConnectorTestBa
         };
         CassandraConnectorConfig config = spy(new CassandraConnectorConfig(Configuration.from(generateDefaultConfigMap())));
         when(config.getCommitLogTransfer()).thenReturn(myTransfer);
-        CassandraConnectorContext context = new CassandraConnectorContext(config);
+        CassandraConnectorContext context = new CassandraConnectorContext(config, new SchemaHolderProvider() {
+            @Override
+            public AbstractSchemaHolder provide(CassandraClient cassandraClient, CassandraConnectorConfig config) {
+                return new SchemaHolder(cassandraClient, config.kafkaTopicPrefix(), config.getSourceInfoStructMaker());
+            }
+        });
         CommitLogPostProcessor postProcessor = spy(new CommitLogPostProcessor(context));
         when(postProcessor.isRunning()).thenReturn(true);
         File dir = new File(context.getCassandraConnectorConfig().commitLogRelocationDir());

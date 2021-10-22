@@ -18,6 +18,7 @@ import java.util.List;
 import java.util.Set;
 
 import org.apache.cassandra.config.DatabaseDescriptor;
+import org.apache.cassandra.db.commitlog.CommitLogReader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -36,7 +37,7 @@ public class CommitLogProcessor extends AbstractProcessor {
 
     private static final String NAME = "Commit Log Processor";
 
-    private final org.apache.cassandra.db.commitlog.CommitLogReader commitLogReader;
+    private final CommitLogReader commitLogReader;
     private final CommitLogReadHandlerImpl commitLogReadHandler;
     private final File cdcDir;
     private final AbstractDirectoryWatcher watcher;
@@ -50,7 +51,7 @@ public class CommitLogProcessor extends AbstractProcessor {
 
     public CommitLogProcessor(CassandraConnectorContext context) throws IOException {
         super(NAME, Duration.ZERO);
-        commitLogReader = new org.apache.cassandra.db.commitlog.CommitLogReader();
+        commitLogReader = new CommitLogReader();
         this.queues = context.getQueues();
         commitLogReadHandler = new CommitLogReadHandlerImpl(
                 context.getSchemaHolder(),

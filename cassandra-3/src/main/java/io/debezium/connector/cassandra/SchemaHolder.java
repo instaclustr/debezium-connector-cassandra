@@ -6,12 +6,7 @@
 package io.debezium.connector.cassandra;
 
 import java.lang.reflect.Method;
-import java.util.List;
 import java.util.Optional;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
-import java.util.stream.Collectors;
 
 import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.config.Schema;
@@ -36,67 +31,38 @@ import io.debezium.connector.SourceInfoStructMaker;
  * Listening to schema changes in Cassandra DB and caches the key and value schema for all CDC-enabled tables.
  * This cache gets updated whenever there's a schema change in Cassandra DB
  */
-public class SchemaHolder {
+public class SchemaHolder extends AbstractSchemaHolder {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(SchemaHolder.class);
 
-    private final ConcurrentMap<KeyspaceTable, KeyValueSchema> tableToKVSchemaMap;
-    private final String kafkaTopicPrefix;
-    private final SourceInfoStructMaker<SourceInfo> sourceInfoStructMaker;
-    private final CassandraClient cassandraClient;
     private final SchemaChangeListener schemaChangeListener;
 
     public SchemaHolder(CassandraClient cassandraClient, String kafkaTopicPrefix, SourceInfoStructMaker<SourceInfo> sourceInfoStructMaker) {
-        this.cassandraClient = cassandraClient;
-        this.kafkaTopicPrefix = kafkaTopicPrefix;
-        this.sourceInfoStructMaker = sourceInfoStructMaker;
-        this.tableToKVSchemaMap = new ConcurrentHashMap<>();
-        this.schemaChangeListener = new CassandraSchemaChangeListener();
-        initialize();
+        super(cassandraClient, kafkaTopicPrefix, sourceInfoStructMaker);
+        this.schemaChangeListener = new CassandraSchemaChangeListener(kafkaTopicPrefix, sourceInfoStructMaker);
+        initialize(schemaChangeListener);
     }
 
-    private void initialize() {
-        LOGGER.info("Initializing SchemaHolder ...");
-        List<TableMetadata> cdcEnabledTableMetadataList = cassandraClient.getCdcEnabledTableMetadataList();
-        for (TableMetadata tm : cdcEnabledTableMetadataList) {
-            addOrUpdateTableSchema(new KeyspaceTable(tm), new KeyValueSchema(kafkaTopicPrefix, tm, sourceInfoStructMaker));
-        }
-        this.cassandraClient.getCluster().register(schemaChangeListener);
-        LOGGER.info("Initialized SchemaHolder.");
-    }
-
+    @Override
     public void close() {
         cassandraClient.getCluster().unregister(schemaChangeListener);
-        LOGGER.info("Closed SchemaHolder.");
+        logger().info("Closed SchemaHolder.");
     }
 
-    public KeyValueSchema getKeyValueSchema(KeyspaceTable kst) {
-        return tableToKVSchemaMap.getOrDefault(kst, null);
-    }
-
-    public Set<TableMetadata> getCdcEnabledTableMetadataSet() {
-        return tableToKVSchemaMap.values().stream()
-                .map(KeyValueSchema::tableMetadata)
-                .collect(Collectors.toSet());
-    }
-
-    private void removeTableSchema(KeyspaceTable kst) {
-        tableToKVSchemaMap.remove(kst);
-        LOGGER.info("Removed the schema for {}.{} from table schema cache.", kst.keyspace, kst.table);
-    }
-
-    private void addOrUpdateTableSchema(KeyspaceTable kst, KeyValueSchema kvs) {
-        boolean isUpdate = tableToKVSchemaMap.containsKey(kst);
-        tableToKVSchemaMap.put(kst, kvs);
-        if (isUpdate) {
-            LOGGER.info("Updated the schema for {}.{} in table schema cache.", kst.keyspace, kst.table);
-        }
-        else {
-            LOGGER.info("Added the schema for {}.{} to table schema cache.", kst.keyspace, kst.table);
-        }
+    @Override
+    protected Logger logger() {
+        return LOGGER;
     }
 
     class CassandraSchemaChangeListener implements SchemaChangeListener {
+
+        private final String kafkaTopicPrefix;
+        private final SourceInfoStructMaker<SourceInfo> sourceInfoStructMaker;
+
+        public CassandraSchemaChangeListener(String kafkaTopicPrefix, SourceInfoStructMaker<SourceInfo> sourceInfoStructMaker) {
+            this.kafkaTopicPrefix = kafkaTopicPrefix;
+            this.sourceInfoStructMaker = sourceInfoStructMaker;
+        }
 
         @Override
         public void onKeyspaceAdded(final KeyspaceMetadata keyspaceMetadata) {
@@ -106,10 +72,10 @@ public class SchemaHolder {
                         KeyspaceParams.create(keyspaceMetadata.isDurableWrites(),
                                 keyspaceMetadata.getReplication())));
                 Keyspace.openWithoutSSTables(keyspaceMetadata.getName());
-                LOGGER.info("Added keyspace [{}] to schema instance.", keyspaceMetadata.asCQLQuery());
+                logger().info("Added keyspace [{}] to schema instance.", keyspaceMetadata.asCQLQuery());
             }
             catch (Exception e) {
-                LOGGER.warn("Error happened while adding the keyspace {} to schema instance.", keyspaceMetadata.getName(), e);
+                logger().warn("Error happened while adding the keyspace {} to schema instance.", keyspaceMetadata.getName(), e);
             }
         }
 
@@ -117,10 +83,10 @@ public class SchemaHolder {
         public void onKeyspaceChanged(final KeyspaceMetadata current, final KeyspaceMetadata previous) {
             try {
                 Schema.instance.updateKeyspace(current.getName(), KeyspaceParams.create(current.isDurableWrites(), current.getReplication()));
-                LOGGER.info("Updated keyspace [{}] in schema instance.", current.asCQLQuery());
+                logger().info("Updated keyspace [{}] in schema instance.", current.asCQLQuery());
             }
             catch (Exception e) {
-                LOGGER.warn("Error happened while updating the keyspace {} in schema instance.", current.getName(), e);
+                logger().warn("Error happened while updating the keyspace {} in schema instance.", current.getName(), e);
             }
         }
 
@@ -131,10 +97,10 @@ public class SchemaHolder {
                         keyspaceMetadata.getName(),
                         KeyspaceParams.create(keyspaceMetadata.isDurableWrites(),
                                 keyspaceMetadata.getReplication())));
-                LOGGER.info("Removed keyspace [{}] from schema instance.", keyspaceMetadata.asCQLQuery());
+                logger().info("Removed keyspace [{}] from schema instance.", keyspaceMetadata.asCQLQuery());
             }
             catch (Exception e) {
-                LOGGER.warn("Error happened while removing the keyspace {} from schema instance.", keyspaceMetadata.getName(), e);
+                logger().warn("Error happened while removing the keyspace {} from schema instance.", keyspaceMetadata.getName(), e);
             }
         }
 
@@ -145,27 +111,27 @@ public class SchemaHolder {
                         new KeyValueSchema(kafkaTopicPrefix, tableMetadata, sourceInfoStructMaker));
             }
             try {
-                LOGGER.debug("Table {}.{} detected to be added!", tableMetadata.getKeyspace().getName(), tableMetadata.getName());
+                logger().debug("Table {}.{} detected to be added!", tableMetadata.getKeyspace().getName(), tableMetadata.getName());
                 final CFMetaData rawCFMetaData = CFMetaData.compile(tableMetadata.asCQLQuery(), tableMetadata.getKeyspace().getName());
                 // we need to copy because CFMetaData.compile will generate new cfId which would not match id of old metadata
                 final CFMetaData newCFMetaData = rawCFMetaData.copy(tableMetadata.getId());
                 Keyspace.open(newCFMetaData.ksName).initCf(newCFMetaData, false);
                 final org.apache.cassandra.schema.KeyspaceMetadata current = Schema.instance.getKSMetaData(newCFMetaData.ksName);
                 if (current == null) {
-                    LOGGER.warn("Keyspace {} doesn't exist", newCFMetaData.ksName);
+                    logger().warn("Keyspace {} doesn't exist", newCFMetaData.ksName);
                     return;
                 }
                 if (current.tables.get(tableMetadata.getName()).isPresent()) {
-                    LOGGER.debug("Table {}.{} is already added!", tableMetadata.getKeyspace(), tableMetadata.getName());
+                    logger().debug("Table {}.{} is already added!", tableMetadata.getKeyspace(), tableMetadata.getName());
                     return;
                 }
                 org.apache.cassandra.schema.KeyspaceMetadata transformed = current.withSwapped(current.tables.with(newCFMetaData));
                 Schema.instance.setKeyspaceMetadata(transformed);
                 Schema.instance.load(newCFMetaData);
-                LOGGER.info("Added table [{}] to schema instance.", tableMetadata.asCQLQuery());
+                logger().info("Added table [{}] to schema instance.", tableMetadata.asCQLQuery());
             }
             catch (Exception e) {
-                LOGGER.warn("Error happened while adding table {}.{} to schema instance.", tableMetadata.getKeyspace(), tableMetadata.getName(), e);
+                logger().warn("Error happened while adding table {}.{} to schema instance.", tableMetadata.getKeyspace(), tableMetadata.getName(), e);
             }
         }
 
@@ -177,15 +143,15 @@ public class SchemaHolder {
             try {
                 final String ksName = table.getKeyspace().getName();
                 final String tableName = table.getName();
-                LOGGER.debug("Table {}.{} detected to be removed!", ksName, tableName);
+                logger().debug("Table {}.{} detected to be removed!", ksName, tableName);
                 final org.apache.cassandra.schema.KeyspaceMetadata oldKsm = Schema.instance.getKSMetaData(ksName);
                 if (oldKsm == null) {
-                    LOGGER.warn("KeyspaceMetadata for keyspace {} is not found!", ksName);
+                    logger().warn("KeyspaceMetadata for keyspace {} is not found!", ksName);
                     return;
                 }
                 final ColumnFamilyStore cfs = Keyspace.openWithoutSSTables(ksName).getColumnFamilyStore(tableName);
                 if (cfs == null) {
-                    LOGGER.warn("ColumnFamilyStore for {}.{} is not found!", ksName, tableName);
+                    logger().warn("ColumnFamilyStore for {}.{} is not found!", ksName, tableName);
                     return;
                 }
                 // make sure all the indexes are dropped, or else.
@@ -201,15 +167,15 @@ public class SchemaHolder {
                     final org.apache.cassandra.schema.KeyspaceMetadata newKsm = oldKsm.withSwapped(oldKsm.tables.without(tableName));
                     Schema.instance.unload(cfm.get());
                     Schema.instance.setKeyspaceMetadata(newKsm);
-                    LOGGER.info("Removed table [{}] from schema instance.", table.asCQLQuery());
+                    logger().info("Removed table [{}] from schema instance.", table.asCQLQuery());
                 }
                 else {
-                    LOGGER.warn("Table {}.{} is not present in old keyspace meta data!", ksName, tableName);
+                    logger().warn("Table {}.{} is not present in old keyspace meta data!", ksName, tableName);
                 }
 
             }
             catch (Exception e) {
-                LOGGER.warn("Error happened while removing table {}.{} from schema instance.", table.getKeyspace().getName(), table.getName(), e);
+                logger().warn("Error happened while removing table {}.{} from schema instance.", table.getKeyspace().getName(), table.getName(), e);
             }
         }
 
@@ -227,7 +193,7 @@ public class SchemaHolder {
                 removeTableSchema(new KeyspaceTable(newTableMetadata));
             }
             try {
-                LOGGER.debug("Detected alternation in schema of {}.{} (previous cdc = {}, current cdc = {})",
+                logger().debug("Detected alternation in schema of {}.{} (previous cdc = {}, current cdc = {})",
                         newTableMetadata.getKeyspace().getName(),
                         newTableMetadata.getName(),
                         oldTableMetaData.getOptions().isCDC(),
@@ -240,10 +206,10 @@ public class SchemaHolder {
                 // we need to copy because CFMetaData.compile will generate new cfId which would not match id of old metadata
                 final CFMetaData newMetadata = rawNewMetadata.copy(oldMetadata.cfId);
                 oldMetadata.apply(newMetadata);
-                LOGGER.info("Updated table [{}] in schema instance.", newTableMetadata.asCQLQuery());
+                logger().info("Updated table [{}] in schema instance.", newTableMetadata.asCQLQuery());
             }
             catch (Exception e) {
-                LOGGER.warn("Error happened while reacting on changed table {}.{} in schema instance.", newTableMetadata.getKeyspace(), newTableMetadata.getName(), e);
+                logger().warn("Error happened while reacting on changed table {}.{} in schema instance.", newTableMetadata.getKeyspace(), newTableMetadata.getName(), e);
             }
         }
 

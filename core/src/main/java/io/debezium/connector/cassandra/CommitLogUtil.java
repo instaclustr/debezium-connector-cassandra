@@ -19,7 +19,7 @@ import org.slf4j.LoggerFactory;
 import io.debezium.connector.cassandra.exceptions.CassandraConnectorDataException;
 
 /**
- * Utility class used by the {@link CommitLogProcessor} to compare/delete commit log files.
+ * Utility class used by the CommitLogProcessor to compare/delete commit log files.
  */
 public final class CommitLogUtil {
     private static final Logger LOGGER = LoggerFactory.getLogger(CommitLogUtil.class);

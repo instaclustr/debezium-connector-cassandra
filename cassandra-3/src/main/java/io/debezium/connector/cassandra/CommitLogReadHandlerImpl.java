@@ -61,10 +61,10 @@ public class CommitLogReadHandlerImpl implements CommitLogReadHandler {
     private final List<ChangeEventQueue<Event>> queues;
     private final RecordMaker recordMaker;
     private final OffsetWriter offsetWriter;
-    private final SchemaHolder schemaHolder;
+    private final AbstractSchemaHolder schemaHolder;
     private final CommitLogProcessorMetrics metrics;
 
-    CommitLogReadHandlerImpl(SchemaHolder schemaHolder,
+    CommitLogReadHandlerImpl(AbstractSchemaHolder schemaHolder,
                              List<ChangeEventQueue<Event>> queues,
                              OffsetWriter offsetWriter,
                              RecordMaker recordMaker,

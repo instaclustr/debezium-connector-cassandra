@@ -21,18 +21,18 @@ import io.debezium.connector.common.CdcSourceTaskContext;
 
 /**
  * Contains contextual information and objects scoped to the lifecycle
- * of {@link CassandraConnectorTask} implementation.
+ * of CassandraConnectorTask implementation.
  */
 public class CassandraConnectorContext extends CdcSourceTaskContext {
     private final CassandraConnectorConfig config;
     private final CassandraClient cassandraClient;
     private final List<ChangeEventQueue<Event>> queues;
     private final KafkaProducer kafkaProducer;
-    private final SchemaHolder schemaHolder;
+    private final AbstractSchemaHolder schemaHolder;
     private final OffsetWriter offsetWriter;
     private final Set<String> erroneousCommitLogs;
 
-    public CassandraConnectorContext(CassandraConnectorConfig config) throws Exception {
+    public CassandraConnectorContext(CassandraConnectorConfig config, SchemaHolderProvider schemaHolderProvider) throws Exception {
 
         super(config.getContextName(), config.getLogicalName(), Collections::emptySet);
         this.config = config;
@@ -65,7 +65,7 @@ public class CassandraConnectorContext extends CdcSourceTaskContext {
             this.kafkaProducer = new KafkaProducer(this.config.getKafkaConfigs());
 
             // Setting up schema holder ...
-            this.schemaHolder = new SchemaHolder(this.cassandraClient, this.config.kafkaTopicPrefix(), this.config.getSourceInfoStructMaker());
+            this.schemaHolder = schemaHolderProvider.provide(this.cassandraClient, this.config);
 
             // Setting up a file-based offset manager ...
             this.offsetWriter = new FileOffsetWriter(this.config.offsetBackingStoreDir());
@@ -81,6 +81,7 @@ public class CassandraConnectorContext extends CdcSourceTaskContext {
     /**
      * Initialize database using cassandra.yml config file. If initialization is successful,
      * load up non-system keyspace schema definitions from Cassandra.
+     *
      * @param yamlConfig the main config file path of a cassandra node
      */
     public void loadDdlFromDisk(String yamlConfig) {
@@ -123,7 +124,7 @@ public class CassandraConnectorContext extends CdcSourceTaskContext {
         return offsetWriter;
     }
 
-    public SchemaHolder getSchemaHolder() {
+    public AbstractSchemaHolder getSchemaHolder() {
         return schemaHolder;
     }
 

@@ -5,7 +5,7 @@
  */
 package io.debezium.connector.cassandra;
 
-import static io.debezium.connector.cassandra.CassandraConnectorTask.METRIC_REGISTRY_INSTANCE;
+import static io.debezium.connector.cassandra.AbstractCassandraConnectorTask.METRIC_REGISTRY_INSTANCE;
 
 import java.util.concurrent.atomic.AtomicLong;
 

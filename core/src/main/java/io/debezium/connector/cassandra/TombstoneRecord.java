@@ -18,7 +18,7 @@ public class TombstoneRecord extends Record {
     }
 
     @Override
-    public EventType getEventType() {
-        return EventType.TOMBSTONE_EVENT;
+    public Event.EventType getEventType() {
+        return Event.EventType.TOMBSTONE_EVENT;
     }
 }
