@@ -5,7 +5,6 @@
  */
 package io.debezium.connector.cassandra;
 
-import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -43,29 +42,6 @@ public class CassandraConnectorConfigTest {
         String cassandraConfig = "cassandra-unit.yaml";
         config = buildTaskConfig(CassandraConnectorConfig.CASSANDRA_CONFIG.name(), cassandraConfig);
         assertEquals(cassandraConfig, config.cassandraConfig());
-
-        String cassandraHosts = "127.0.0.1,127.0.0.2";
-        config = buildTaskConfig(CassandraConnectorConfig.CASSANDRA_HOSTS.name(), cassandraHosts);
-        assertArrayEquals(cassandraHosts.split(","), config.cassandraHosts());
-
-        int cassandraPort = 9412;
-        config = buildTaskConfig(CassandraConnectorConfig.CASSANDRA_PORT.name(), String.valueOf(cassandraPort));
-        assertEquals(cassandraPort, config.cassandraPort());
-
-        String cassandraUsername = "test_user";
-        config = buildTaskConfig(CassandraConnectorConfig.CASSANDRA_USERNAME.name(), cassandraUsername);
-        assertEquals(cassandraUsername, config.cassandraUsername());
-
-        String cassandraPassword = "test_pw";
-        config = buildTaskConfig(CassandraConnectorConfig.CASSANDRA_PASSWORD.name(), cassandraPassword);
-        assertEquals(cassandraPassword, config.cassandraPassword());
-
-        config = buildTaskConfig(CassandraConnectorConfig.CASSANDRA_SSL_ENABLED.name(), "true");
-        assertTrue(config.cassandraSslEnabled());
-
-        String cassandraSslConfigPath = "/some/path/";
-        config = buildTaskConfig(CassandraConnectorConfig.CASSANDRA_SSL_CONFIG_PATH.name(), cassandraSslConfigPath);
-        assertEquals(cassandraSslConfigPath, config.cassandraSslConfigPath());
 
         String kafkaServers = "host1,host2,host3";
         config = buildTaskConfig("kafka.producer.bootstrap.servers", kafkaServers);
@@ -168,8 +144,6 @@ public class CassandraConnectorConfigTest {
         CassandraConnectorConfig config = new CassandraConnectorConfig(Configuration.from(props));
         assertEquals(CassandraConnectorConfig.DEFAULT_SNAPSHOT_CONSISTENCY, config.snapshotConsistencyLevel().name().toUpperCase());
         assertEquals(CassandraConnectorConfig.DEFAULT_HTTP_PORT, config.httpPort());
-        assertArrayEquals(CassandraConnectorConfig.DEFAULT_CASSANDRA_HOST.split(","), config.cassandraHosts());
-        assertEquals(CassandraConnectorConfig.DEFAULT_CASSANDRA_PORT, config.cassandraPort());
         assertEquals(CassandraConnectorConfig.DEFAULT_MAX_QUEUE_SIZE, config.maxQueueSize());
         assertEquals(CassandraConnectorConfig.DEFAULT_MAX_BATCH_SIZE, config.maxBatchSize());
         assertEquals(CassandraConnectorConfig.DEFAULT_POLL_INTERVAL_MS, config.pollInterval().toMillis());
@@ -181,7 +155,6 @@ public class CassandraConnectorConfigTest {
         assertEquals(CassandraConnectorConfig.DEFAULT_COMMIT_LOG_POST_PROCESSING_ENABLED, config.postProcessEnabled());
         assertEquals(CassandraConnectorConfig.DEFAULT_COMMIT_LOG_ERROR_REPROCESSING_ENABLED, config.errorCommitLogReprocessEnabled());
         assertEquals(CassandraConnectorConfig.DEFAULT_COMMIT_LOG_TRANSFER_CLASS, config.getCommitLogTransfer().getClass().getName());
-        assertFalse(config.cassandraSslEnabled());
         assertFalse(config.tombstonesOnDelete());
         assertEquals(CassandraConnectorConfig.SnapshotMode.INITIAL, config.snapshotMode());
         assertEquals(CassandraConnectorConfig.DEFAULT_LATEST_COMMIT_LOG_ONLY, config.latestCommitLogOnly());

@@ -13,7 +13,7 @@ import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.errors.DataException;
 
-import com.datastax.driver.core.ColumnMetadata;
+import com.datastax.oss.driver.api.core.metadata.schema.ColumnMetadata;
 
 import io.debezium.DebeziumException;
 import io.debezium.connector.cassandra.transforms.CassandraTypeConverter;
@@ -85,7 +85,7 @@ public class CellData implements KafkaRecord {
         AbstractType<?> convertedType = CassandraTypeConverter.convert(cm.getType());
         Schema valueSchema = CassandraTypeDeserializer.getSchemaBuilder(convertedType).build();
         if (valueSchema != null) {
-            SchemaBuilder schemaBuilder = SchemaBuilder.struct().name(cm.getName())
+            SchemaBuilder schemaBuilder = SchemaBuilder.struct().name(cm.getName().toString())
                     .field(CELL_VALUE_KEY, valueSchema)
                     .field(CELL_DELETION_TS_KEY, Schema.OPTIONAL_INT64_SCHEMA)
                     .field(CELL_SET_KEY, Schema.BOOLEAN_SCHEMA);

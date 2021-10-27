@@ -40,7 +40,7 @@ import org.apache.cassandra.db.marshal.UserType;
 import org.apache.cassandra.db.rows.ComplexColumnData;
 import org.apache.kafka.connect.data.SchemaBuilder;
 
-import com.datastax.driver.core.DataType;
+import com.datastax.oss.driver.api.core.type.DataType;
 
 import io.debezium.annotation.Immutable;
 import io.debezium.annotation.ThreadSafe;

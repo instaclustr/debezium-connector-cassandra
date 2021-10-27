@@ -5,20 +5,19 @@
  */
 package io.debezium.connector.cassandra.transforms.type.converter;
 
-import java.util.List;
-
 import org.apache.cassandra.db.marshal.MapType;
 
-import com.datastax.driver.core.DataType;
+import com.datastax.oss.driver.api.core.type.DataType;
+import com.datastax.oss.driver.internal.core.type.DefaultMapType;
 
 import io.debezium.connector.cassandra.transforms.CassandraTypeConverter;
 
 public class MapTypeConverter implements TypeConverter<MapType<?, ?>> {
     @Override
     public MapType convert(DataType dataType) {
-        List<DataType> innerDataTypes = dataType.getTypeArguments();
-        return MapType.getInstance(CassandraTypeConverter.convert(innerDataTypes.get(0)),
-                CassandraTypeConverter.convert(innerDataTypes.get(1)),
-                !dataType.isFrozen());
+        DefaultMapType mapType = (DefaultMapType) dataType;
+        return MapType.getInstance(CassandraTypeConverter.convert(mapType.getKeyType()),
+                CassandraTypeConverter.convert(mapType.getValueType()),
+                !mapType.isFrozen());
     }
 }

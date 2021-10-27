@@ -11,6 +11,7 @@ import static org.junit.Assert.assertTrue;
 
 import java.io.File;
 import java.util.List;
+import java.util.concurrent.Callable;
 
 import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.config.DatabaseDescriptor;
@@ -20,6 +21,7 @@ import org.apache.cassandra.db.SimpleBuilders;
 import org.apache.cassandra.db.commitlog.CommitLog;
 import org.apache.cassandra.db.partitions.PartitionUpdate;
 import org.apache.cassandra.db.rows.Row;
+import org.awaitility.Awaitility;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -47,11 +49,19 @@ public class CommitLogProcessorTest extends EmbeddedCassandraConnectorTestBase {
     @Test
     public void testProcessCommitLogs() throws Exception {
         int commitLogRowSize = 10;
-        context.getCassandraClient().execute("CREATE TABLE IF NOT EXISTS " + keyspaceTable("cdc_table") + " (a int, b int, PRIMARY KEY(a)) WITH cdc = true;");
+        Thread.sleep(10000);
+        runCql("CREATE TABLE IF NOT EXISTS " + keyspaceTable("cdc_table") + " (a int, b int, PRIMARY KEY(a)) WITH cdc = true;");
+
+        Awaitility.await().until(new Callable<Boolean>() {
+            @Override
+            public Boolean call() throws Exception {
+                return context.getSchemaHolder().getKeyValueSchema(new KeyspaceTable(TEST_KEYSPACE_NAME, "cdc_table")) != null;
+            }
+        });
 
         // programmatically add insertion and deletion events into commit log, this is because running an 'INSERT' or 'DELETE'
         // cql against the embedded Cassandra does not modify the commit log file on disk.
-        CFMetaData cfMetaData = Schema.instance.getCFMetaData(TEST_KEYSPACE, "cdc_table");
+        CFMetaData cfMetaData = Schema.instance.getCFMetaData(TEST_KEYSPACE_NAME, "cdc_table");
         for (int i = 0; i < commitLogRowSize; i++) {
             SimpleBuilders.PartitionUpdateBuilder puBuilder = new SimpleBuilders.PartitionUpdateBuilder(cfMetaData, i);
             Row row = puBuilder.row().add("b", i).build();

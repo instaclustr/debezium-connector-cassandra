@@ -26,7 +26,7 @@ import io.debezium.connector.cassandra.exceptions.CassandraConnectorTaskExceptio
 
 /**
  * A concrete implementation of {@link OffsetWriter} which tracks the progress of events
- * being processed by the {@link SnapshotProcessor} and {@link CommitLogProcessor} to
+ * being processed by the {@link SnapshotProcessor} and respective commit log processor to
  * property files, snapshot_offset.properties and commitlog_offset.properties, respectively.
  *
  * The property key is the table for the offset, and is serialized in the format of <keyspace>.<table>

@@ -14,12 +14,12 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.apache.cassandra.config.DatabaseDescriptor;
+import org.apache.kafka.clients.producer.ProducerConfig;
 import org.junit.Assert;
 import org.junit.Test;
 import org.mockito.Mockito;
@@ -29,7 +29,7 @@ import io.debezium.connector.base.ChangeEventQueue;
 public class SnapshotProcessorTest extends EmbeddedCassandraConnectorTestBase {
     @Test
     public void testSnapshotTable() throws Exception {
-        CassandraConnectorContext context = generateTaskContext();
+        CassandraConnectorContext context = EmbeddedCassandraConnectorTestBase.generateTaskContext();
         SnapshotProcessor snapshotProcessor = Mockito.spy(new SnapshotProcessor(context));
         when(snapshotProcessor.isRunning()).thenReturn(true);
 
@@ -121,7 +121,8 @@ public class SnapshotProcessorTest extends EmbeddedCassandraConnectorTestBase {
 
     @Test
     public void testSnapshotModeAlways() throws Exception {
-        Map<String, Object> configs = new HashMap<>();
+        Map<String, Object> configs = propertiesForContext();
+        configs.put(CassandraConnectorConfig.KAFKA_PRODUCER_CONFIG_PREFIX + ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, TEST_KAFKA_SERVERS);
         configs.put(CassandraConnectorConfig.SNAPSHOT_MODE.name(), "always");
         configs.put(CassandraConnectorConfig.SNAPSHOT_POLL_INTERVAL_MS.name(), "0");
         CassandraConnectorContext context = generateTaskContext(configs);
@@ -138,7 +139,7 @@ public class SnapshotProcessorTest extends EmbeddedCassandraConnectorTestBase {
 
     @Test
     public void testSnapshotModeInitial() throws Exception {
-        Map<String, Object> configs = new HashMap<>();
+        Map<String, Object> configs = propertiesForContext();
         configs.put(CassandraConnectorConfig.SNAPSHOT_MODE.name(), "initial");
         configs.put(CassandraConnectorConfig.SNAPSHOT_POLL_INTERVAL_MS.name(), "0");
         CassandraConnectorContext context = generateTaskContext(configs);
@@ -155,7 +156,7 @@ public class SnapshotProcessorTest extends EmbeddedCassandraConnectorTestBase {
 
     @Test
     public void testSnapshotModeNever() throws Exception {
-        Map<String, Object> configs = new HashMap<>();
+        Map<String, Object> configs = propertiesForContext();
         configs.put(CassandraConnectorConfig.SNAPSHOT_MODE.name(), "never");
         configs.put(CassandraConnectorConfig.SNAPSHOT_POLL_INTERVAL_MS.name(), "0");
         CassandraConnectorContext context = generateTaskContext(configs);

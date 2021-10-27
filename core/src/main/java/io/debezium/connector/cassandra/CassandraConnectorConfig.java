@@ -22,7 +22,8 @@ import org.apache.kafka.common.config.ConfigDef.Width;
 import org.apache.kafka.common.serialization.ByteArraySerializer;
 import org.apache.kafka.connect.storage.Converter;
 
-import com.datastax.driver.core.ConsistencyLevel;
+import com.datastax.oss.driver.api.core.ConsistencyLevel;
+import com.datastax.oss.driver.api.core.DefaultConsistencyLevel;
 
 import io.debezium.config.CommonConnectorConfig;
 import io.debezium.config.Configuration;
@@ -80,7 +81,7 @@ public class CassandraConnectorConfig extends CommonConnectorConfig {
     public static final String VALUE_CONVERTER_PREFIX = "value.converter.";
 
     /**
-     * The prefix for all {@link CommitLogTransfer} configurations.
+     * The prefix for all {@link io.debezium.connector.cassandra.CommitLogTransfer} configurations.
      */
     public static final String COMMIT_LOG_TRANSFER_CONFIG_PREFIX = "commit.log.transfer.";
 
@@ -350,7 +351,7 @@ public class CassandraConnectorConfig extends CommonConnectorConfig {
 
     public ConsistencyLevel snapshotConsistencyLevel() {
         String cl = this.getConfig().getString(SNAPSHOT_CONSISTENCY);
-        return ConsistencyLevel.valueOf(cl);
+        return DefaultConsistencyLevel.valueOf(cl);
     }
 
     public int httpPort() {
@@ -359,31 +360,6 @@ public class CassandraConnectorConfig extends CommonConnectorConfig {
 
     public String cassandraConfig() {
         return this.getConfig().getString(CASSANDRA_CONFIG);
-    }
-
-    public String[] cassandraHosts() {
-        String hosts = this.getConfig().getString(CASSANDRA_HOSTS);
-        return hosts.split(",");
-    }
-
-    public int cassandraPort() {
-        return this.getConfig().getInteger(CASSANDRA_PORT);
-    }
-
-    public boolean cassandraSslEnabled() {
-        return this.getConfig().getBoolean(CASSANDRA_SSL_ENABLED);
-    }
-
-    public String cassandraSslConfigPath() {
-        return this.getConfig().getString(CASSANDRA_SSL_CONFIG_PATH);
-    }
-
-    public String cassandraUsername() {
-        return this.getConfig().getString(CASSANDRA_USERNAME);
-    }
-
-    public String cassandraPassword() {
-        return this.getConfig().getString(CASSANDRA_PASSWORD);
     }
 
     public String commitLogRelocationDir() {

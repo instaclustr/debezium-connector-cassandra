@@ -5,36 +5,46 @@
  */
 package io.debezium.connector.cassandra;
 
+import static com.google.common.collect.ImmutableMap.of;
+import static java.util.concurrent.TimeUnit.MINUTES;
+import static java.util.concurrent.TimeUnit.SECONDS;
+import static org.awaitility.Awaitility.await;
+
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.time.Duration;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.stream.Collectors;
 
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.kafka.clients.producer.ProducerConfig;
-import org.cassandraunit.utils.CqlOperations;
-import org.cassandraunit.utils.EmbeddedCassandraServerHelper;
+import org.junit.After;
 import org.junit.AfterClass;
+import org.junit.Before;
 import org.junit.BeforeClass;
 
-import com.datastax.driver.core.Cluster;
-import com.datastax.driver.core.Session;
-import com.datastax.driver.core.TableMetadata;
+import com.datastax.oss.driver.api.core.CqlSession;
+import com.datastax.oss.driver.api.core.cql.SimpleStatement;
+import com.datastax.oss.driver.api.querybuilder.SchemaBuilder;
+import com.github.nosan.embedded.cassandra.Cassandra;
+import com.github.nosan.embedded.cassandra.CassandraBuilder;
+import com.github.nosan.embedded.cassandra.Version;
+import com.github.nosan.embedded.cassandra.commons.ClassPathResource;
 
 import io.debezium.config.Configuration;
+import io.debezium.kafka.KafkaCluster;
+import io.debezium.util.Testing;
 
-/**
- * Base class used to automatically spin up a single-node embedded Cassandra cluster before tests
- * and handle clean up after tests.
- */
 public abstract class EmbeddedCassandraConnectorTestBase {
+
+    public static final String CASSANDRA_3_VERSION = System.getProperty("cassandra3.version", "3.11.10");
+
     public static final String TEST_CONNECTOR_NAME = "cassandra-01";
-    public static final String TEST_KEYSPACE = "test_keyspace";
-    public static final long STARTUP_TIMEOUT_IN_SECONDS = 10;
     public static final String TEST_CASSANDRA_YAML_CONFIG = "cassandra-unit.yaml";
     public static final String TEST_CASSANDRA_HOSTS = "127.0.0.1";
     public static final int TEST_CASSANDRA_PORT = 9042;
@@ -42,61 +52,110 @@ public abstract class EmbeddedCassandraConnectorTestBase {
     public static final String TEST_SCHEMA_REGISTRY_URL = "http://localhost:8081";
     public static final String TEST_KAFKA_TOPIC_PREFIX = "test_topic";
 
+    public static final String TEST_KEYSPACE_NAME = "test_keyspace";
+
+    public static Cassandra cassandra;
+    private static Path cassandraDir;
+
+    private KafkaCluster kafkaCluster;
+    private File kafkaDataDir;
+
     @BeforeClass
     public static void setUpClass() throws Exception {
-        startEmbeddedCassandra();
+        cassandraDir = Testing.Files.createTestingDirectory("embeddedCassandra").toPath();
+        cassandra = getCassandra(cassandraDir, CASSANDRA_3_VERSION);
+        cassandra.start();
+        waitForCql();
         createTestKeyspace();
     }
 
     @AfterClass
     public static void tearDownClass() {
         destroyTestKeyspace();
-        stopEmbeddedCassandra();
+        cassandra.stop();
+        Testing.Files.delete(cassandraDir);
     }
 
-    /**
-     * Truncate data in all tables in TEST_KEYSPACE, but do not drop the tables
-     */
-    protected static void truncateTestKeyspaceTableData() {
-        EmbeddedCassandraServerHelper.cleanDataEmbeddedCassandra(TEST_KEYSPACE);
+    @Before
+    public void beforeEach() throws Exception {
+        kafkaDataDir = Testing.Files.createTestingDirectory("kafkaCluster");
+        Testing.Files.delete(kafkaDataDir);
+        kafkaCluster = new KafkaCluster().usingDirectory(kafkaDataDir)
+                .deleteDataUponShutdown(true)
+                .addBrokers(1)
+                .withPorts(2181, 9092)
+                .startup();
     }
 
-    /**
-     * Drop all tables in TEST_KEYSPACE
-     */
-    protected static void deleteTestKeyspaceTables() {
-        Session session = EmbeddedCassandraServerHelper.getSession();
-        Cluster cluster = EmbeddedCassandraServerHelper.getCluster();
-        for (TableMetadata tm : cluster.getMetadata().getKeyspace(TEST_KEYSPACE).getTables()) {
-            session.execute("DROP TABLE IF EXISTS " + keyspaceTable(tm.getName()));
+    @After
+    public void afterEach() {
+        kafkaCluster.shutdown();
+        Testing.Files.delete(kafkaDataDir);
+    }
+
+    protected static void destroyTestKeyspace() {
+        if (cassandra.isRunning()) {
+            try (CqlSession session = CqlSession.builder().build()) {
+                session.execute(SchemaBuilder.dropKeyspace(TEST_KEYSPACE_NAME).build());
+            }
+        }
+        else {
+            throw new IllegalStateException("Cassandra is not started yet or it was already stopped!");
         }
     }
 
-    /**
-     * Generate a task context with default test configs
-     */
-    protected static CassandraConnectorContext generateTaskContext() throws Exception {
-        Properties defaults = generateDefaultConfigMap();
-        return new CassandraConnectorContext(new CassandraConnectorConfig(Configuration.from(defaults)), new SchemaHolderProvider() {
-            @Override
-            public AbstractSchemaHolder provide(CassandraClient cassandraClient, CassandraConnectorConfig config) {
-                return new SchemaHolder(cassandraClient, config.kafkaTopicPrefix(), config.getSourceInfoStructMaker());
+    protected static void createTestKeyspace() {
+        if (cassandra.isRunning()) {
+            try (CqlSession session = CqlSession.builder().build()) {
+                session.execute(SchemaBuilder.createKeyspace(TEST_KEYSPACE_NAME)
+                        .ifNotExists()
+                        .withNetworkTopologyStrategy(of("datacenter1", 1))
+                        .build());
             }
-        });
+        }
+        else {
+            throw new IllegalStateException("Cassandra is not started yet or it was already stopped!");
+        }
     }
 
-    /**
-     * General a task context with default and custom test configs
-     */
-    protected static CassandraConnectorContext generateTaskContext(Map<String, Object> configs) throws Exception {
-        Properties defaults = generateDefaultConfigMap();
-        defaults.putAll(configs);
-        return new CassandraConnectorContext(new CassandraConnectorConfig(Configuration.from(defaults)), new SchemaHolderProvider() {
-            @Override
-            public AbstractSchemaHolder provide(CassandraClient cassandraClient, CassandraConnectorConfig config) {
-                return new SchemaHolder(cassandraClient, config.kafkaTopicPrefix(), config.getSourceInfoStructMaker());
+    protected static List<String> getTables(CqlSession session) {
+        return session.getMetadata()
+                .getKeyspace(TEST_KEYSPACE_NAME).get()
+                .getTables()
+                .values()
+                .stream()
+                .map(tmd -> tmd.getName().toString())
+                .collect(Collectors.toList());
+    }
+
+    protected static void truncateTestKeyspaceTableData() {
+        try (CqlSession session = CqlSession.builder().build()) {
+            for (String table : getTables(session)) {
+                session.execute(SimpleStatement.newInstance(String.format("TRUNCATE %s.%s", TEST_KEYSPACE_NAME, table)));
             }
-        });
+        }
+    }
+
+    protected static void deleteTestKeyspaceTables() {
+        try (CqlSession session = CqlSession.builder().build()) {
+            for (String table : getTables(session)) {
+                session.execute(SimpleStatement.newInstance(String.format("DROP TABLE IF EXISTS %s.%s", TEST_KEYSPACE_NAME, table)));
+            }
+        }
+    }
+
+    protected static CassandraConnectorContext generateTaskContext(Configuration configuration) throws Exception {
+        return new CassandraConnectorContext(new CassandraConnectorConfig(configuration),
+                new CassandraConnectorTask.Cassandra3SchemaLoader(),
+                new CassandraConnectorTask.Cassandra3SchemaChangeListenerProvider());
+    }
+
+    protected static CassandraConnectorContext generateTaskContext() throws Exception {
+        return generateTaskContext(Configuration.from(generateDefaultConfigMap()));
+    }
+
+    protected static CassandraConnectorContext generateTaskContext(Map<String, Object> configs) throws Exception {
+        return generateTaskContext(Configuration.from(configs));
     }
 
     /**
@@ -119,7 +178,7 @@ public abstract class EmbeddedCassandraConnectorTestBase {
      * Return the full name of the test table in the form of <keyspace>.<table>
      */
     protected static String keyspaceTable(String tableName) {
-        return TEST_KEYSPACE + "." + tableName;
+        return TEST_KEYSPACE_NAME + "." + tableName;
     }
 
     /**
@@ -176,10 +235,32 @@ public abstract class EmbeddedCassandraConnectorTestBase {
         }
     }
 
+    protected static void runCql(String statement) {
+        runCql(SimpleStatement.builder(statement).build());
+    }
+
+    protected static void runCql(SimpleStatement statement) {
+        if (cassandra.isRunning()) {
+            try (CqlSession session = CqlSession.builder().build()) {
+                session.execute(statement);
+            }
+        }
+        else {
+            throw new IllegalStateException("Cassandra is not started yet or it was already stopped!");
+        }
+    }
+
+    protected static Cassandra getCassandra(final Path cassandraHome, final String version) {
+        return new CassandraBuilder().version(Version.parse(version))
+                .jvmOptions("-Dcassandra.ring_delay_ms=1000", "-Xms1g", "-Xmx1g")
+                .workingDirectory(() -> cassandraHome)
+                .configFile(new ClassPathResource("cassandra-unit.yaml")).build();
+    }
+
     protected static Properties generateDefaultConfigMap() throws IOException {
         Properties props = new Properties();
         props.put(CassandraConnectorConfig.CONNECTOR_NAME.name(), TEST_CONNECTOR_NAME);
-        props.put(CassandraConnectorConfig.CASSANDRA_CONFIG.name(), TEST_CASSANDRA_YAML_CONFIG);
+        props.put(CassandraConnectorConfig.CASSANDRA_CONFIG.name(), Paths.get("src/test/resources/cassandra-unit-for-context.yaml").toAbsolutePath().toString());
         props.put(CassandraConnectorConfig.KAFKA_TOPIC_PREFIX.name(), TEST_KAFKA_TOPIC_PREFIX);
         props.put(CassandraConnectorConfig.CASSANDRA_HOSTS.name(), TEST_CASSANDRA_HOSTS);
         props.put(CassandraConnectorConfig.CASSANDRA_PORT.name(), String.valueOf(TEST_CASSANDRA_PORT));
@@ -189,21 +270,33 @@ public abstract class EmbeddedCassandraConnectorTestBase {
         return props;
     }
 
-    private static void startEmbeddedCassandra() throws Exception {
-        EmbeddedCassandraServerHelper.startEmbeddedCassandra(TEST_CASSANDRA_YAML_CONFIG, Duration.ofSeconds(STARTUP_TIMEOUT_IN_SECONDS).toMillis());
+    protected static HashMap<String, Object> propertiesForContext() throws IOException {
+        return new HashMap<String, Object>() {
+            {
+                put(CassandraConnectorConfig.CONNECTOR_NAME.name(), TEST_CONNECTOR_NAME);
+                put(CassandraConnectorConfig.CASSANDRA_CONFIG.name(), Paths.get("src/test/resources/cassandra-unit-for-context.yaml").toAbsolutePath().toString());
+                put(CassandraConnectorConfig.KAFKA_TOPIC_PREFIX.name(), TEST_KAFKA_TOPIC_PREFIX);
+                put(CassandraConnectorConfig.CASSANDRA_HOSTS.name(), TEST_CASSANDRA_HOSTS);
+                put(CassandraConnectorConfig.CASSANDRA_PORT.name(), String.valueOf(TEST_CASSANDRA_PORT));
+                put(CassandraConnectorConfig.OFFSET_BACKING_STORE_DIR.name(), Files.createTempDirectory("offset").toString());
+                put(CassandraConnectorConfig.KAFKA_PRODUCER_CONFIG_PREFIX + ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, TEST_KAFKA_SERVERS);
+                put(CassandraConnectorConfig.COMMIT_LOG_RELOCATION_DIR.name(), Files.createTempDirectory("cdc_raw_relocation").toString());
+            }
+        };
     }
 
-    private static void stopEmbeddedCassandra() {
-        EmbeddedCassandraServerHelper.cleanEmbeddedCassandra();
-    }
-
-    private static void createTestKeyspace() {
-        Session session = EmbeddedCassandraServerHelper.getSession();
-        CqlOperations.createKeyspace(session).accept(TEST_KEYSPACE);
-    }
-
-    private static void destroyTestKeyspace() {
-        Session session = EmbeddedCassandraServerHelper.getSession();
-        CqlOperations.dropKeyspace(session).accept(TEST_KEYSPACE);
+    protected static void waitForCql() {
+        await()
+                .pollInterval(10, SECONDS)
+                .pollInSameThread()
+                .timeout(1, MINUTES)
+                .until(() -> {
+                    try (final CqlSession ignored = CqlSession.builder().build()) {
+                        return true;
+                    }
+                    catch (Exception ex) {
+                        return false;
+                    }
+                });
     }
 }

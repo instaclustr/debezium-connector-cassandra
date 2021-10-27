@@ -32,7 +32,7 @@ public class QueueProcessorTest extends EmbeddedCassandraConnectorTestBase {
 
     @Before
     public void setUp() throws Exception {
-        context = generateTaskContext();
+        context = EmbeddedCassandraConnectorTestBase.generateTaskContext();
         emitter = mock(KafkaRecordEmitter.class);
         queueProcessor = new QueueProcessor(context, 0, emitter);
     }
@@ -52,7 +52,7 @@ public class QueueProcessorTest extends EmbeddedCassandraConnectorTestBase {
             CassandraConnectorConfig config = new CassandraConnectorConfig(Configuration.from(new Properties()));
             SourceInfo sourceInfo = new SourceInfo(config, DatabaseDescriptor.getClusterName(),
                     new OffsetPosition("CommitLog-6-123.log", i),
-                    new KeyspaceTable(TEST_KEYSPACE, "cdc_table"), false,
+                    new KeyspaceTable(TEST_KEYSPACE_NAME, "cdc_table"), false,
                     Conversions.toInstantFromMicros(System.currentTimeMillis() * 1000));
             Record record = new ChangeRecord(sourceInfo, new RowData(), Schema.INT32_SCHEMA, Schema.INT32_SCHEMA, Record.Operation.INSERT, false);
             queue.enqueue(record);
@@ -74,7 +74,7 @@ public class QueueProcessorTest extends EmbeddedCassandraConnectorTestBase {
             CassandraConnectorConfig config = new CassandraConnectorConfig(Configuration.from(new Properties()));
             SourceInfo sourceInfo = new SourceInfo(config, DatabaseDescriptor.getClusterName(),
                     new OffsetPosition("CommitLog-6-123.log", i),
-                    new KeyspaceTable(TEST_KEYSPACE, "cdc_table"), false,
+                    new KeyspaceTable(TEST_KEYSPACE_NAME, "cdc_table"), false,
                     Conversions.toInstantFromMicros(System.currentTimeMillis() * 1000));
             Record record = new TombstoneRecord(sourceInfo, new RowData(), Schema.INT32_SCHEMA);
             queue.enqueue(record);

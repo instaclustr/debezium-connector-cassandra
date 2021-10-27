@@ -7,15 +7,13 @@ package io.debezium.connector.cassandra.transforms;
 
 import org.apache.kafka.connect.data.SchemaBuilder;
 
-import com.datastax.driver.core.DataType;
-
 import io.debezium.data.Uuid;
 import io.debezium.time.Date;
 import io.debezium.time.NanoDuration;
 import io.debezium.time.Timestamp;
 
 /**
- * Class that maps Cassandra's {@link DataType} to its corresponding Kafka Connect {@link SchemaBuilder}.
+ * Class that maps Cassandra's {@link com.datastax.oss.driver.api.core.type.DataType} to its corresponding Kafka Connect {@link SchemaBuilder}.
  */
 public final class CassandraTypeKafkaSchemaBuilders {
 

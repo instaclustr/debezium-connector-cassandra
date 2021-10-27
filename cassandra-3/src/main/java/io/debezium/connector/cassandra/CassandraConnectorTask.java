@@ -7,6 +7,8 @@ package io.debezium.connector.cassandra;
 
 import java.util.List;
 
+import org.apache.cassandra.config.DatabaseDescriptor;
+import org.apache.cassandra.config.Schema;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -22,15 +24,38 @@ import io.debezium.connector.cassandra.exceptions.CassandraConnectorTaskExceptio
 public class CassandraConnectorTask extends AbstractCassandraConnectorTask {
     private static final Logger LOGGER = LoggerFactory.getLogger(CassandraConnectorTask.class);
 
-    public static void main(String[] args) throws Exception {
-        final SchemaHolderProvider provider = (cassandraClient, cfg) -> new SchemaHolder(cassandraClient,
-                cfg.kafkaTopicPrefix(),
-                cfg.getSourceInfoStructMaker());
-        AbstractCassandraConnectorTask.main(args, config -> new CassandraConnectorTask(config, provider));
+    public static class Cassandra3SchemaLoader implements SchemaLoader {
+
+        @Override
+        public void load(String cassandraYaml) {
+            System.setProperty("cassandra.config", "file://" + cassandraYaml);
+            if (!DatabaseDescriptor.isDaemonInitialized() && !DatabaseDescriptor.isToolInitialized()) {
+                DatabaseDescriptor.toolInitialization();
+                Schema.instance.loadFromDisk(false);
+            }
+        }
     }
 
-    public CassandraConnectorTask(CassandraConnectorConfig config, SchemaHolderProvider schemaHolderProvider) {
-        super(config, schemaHolderProvider);
+    public static class Cassandra3SchemaChangeListenerProvider implements SchemaChangeListenerProvider {
+
+        @Override
+        public AbstractSchemaChangeListener provide(CassandraConnectorConfig config) {
+            return new Cassandra3SchemaChangeListener(config.kafkaTopicPrefix(),
+                    config.getSourceInfoStructMaker(),
+                    new SchemaHolder());
+        }
+    }
+
+    public static void main(String[] args) throws Exception {
+        AbstractCassandraConnectorTask.main(args, config -> new CassandraConnectorTask(config,
+                new Cassandra3SchemaLoader(),
+                new Cassandra3SchemaChangeListenerProvider()));
+    }
+
+    public CassandraConnectorTask(CassandraConnectorConfig config,
+                                  SchemaLoader schemaLoader,
+                                  SchemaChangeListenerProvider schemaChangeListener) {
+        super(config, schemaLoader, schemaChangeListener);
     }
 
     protected ProcessorGroup initProcessorGroup(CassandraConnectorContext taskContext) {

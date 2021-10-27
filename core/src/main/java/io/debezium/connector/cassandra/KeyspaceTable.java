@@ -7,7 +7,7 @@ package io.debezium.connector.cassandra;
 
 import java.util.Objects;
 
-import com.datastax.driver.core.TableMetadata;
+import com.datastax.oss.driver.api.core.metadata.schema.TableMetadata;
 
 import io.debezium.schema.DataCollectionId;
 
@@ -24,8 +24,8 @@ public class KeyspaceTable implements DataCollectionId {
     }
 
     public KeyspaceTable(TableMetadata tableMetadata) {
-        this.keyspace = tableMetadata.getKeyspace().getName();
-        this.table = tableMetadata.getName();
+        this.keyspace = tableMetadata.getKeyspace().toString();
+        this.table = tableMetadata.getName().toString();
     }
 
     public String name() {

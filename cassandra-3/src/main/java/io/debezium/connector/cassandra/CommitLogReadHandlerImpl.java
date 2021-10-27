@@ -9,10 +9,10 @@ import static io.debezium.connector.cassandra.CommitLogReadHandlerImpl.RowType.D
 import static io.debezium.connector.cassandra.CommitLogReadHandlerImpl.RowType.INSERT;
 import static io.debezium.connector.cassandra.CommitLogReadHandlerImpl.RowType.UPDATE;
 
-import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -37,8 +37,8 @@ import org.apache.kafka.connect.data.Schema;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.datastax.driver.core.ColumnMetadata;
-import com.datastax.driver.core.TableMetadata;
+import com.datastax.oss.driver.api.core.metadata.schema.ColumnMetadata;
+import com.datastax.oss.driver.api.core.metadata.schema.TableMetadata;
 
 import io.debezium.DebeziumException;
 import io.debezium.connector.base.ChangeEventQueue;
@@ -61,10 +61,10 @@ public class CommitLogReadHandlerImpl implements CommitLogReadHandler {
     private final List<ChangeEventQueue<Event>> queues;
     private final RecordMaker recordMaker;
     private final OffsetWriter offsetWriter;
-    private final AbstractSchemaHolder schemaHolder;
+    private final SchemaHolder schemaHolder;
     private final CommitLogProcessorMetrics metrics;
 
-    CommitLogReadHandlerImpl(AbstractSchemaHolder schemaHolder,
+    CommitLogReadHandlerImpl(SchemaHolder schemaHolder,
                              List<ChangeEventQueue<Event>> queues,
                              OffsetWriter offsetWriter,
                              RecordMaker recordMaker,
@@ -236,7 +236,7 @@ public class CommitLogReadHandlerImpl implements CommitLogReadHandler {
             }
             catch (Exception e) {
                 throw new DebeziumException(String.format("Failed to process PartitionUpdate %s at %s for table %s.",
-                        pu.toString(), offsetPosition.toString(), keyspaceTable.name()), e);
+                        pu, offsetPosition, keyspaceTable.name()), e);
             }
         }
 
@@ -244,13 +244,13 @@ public class CommitLogReadHandlerImpl implements CommitLogReadHandler {
     }
 
     @Override
-    public void handleUnrecoverableError(CommitLogReadException exception) throws IOException {
+    public void handleUnrecoverableError(CommitLogReadException exception) {
         LOGGER.error("Unrecoverable error when reading commit log", exception);
         metrics.onUnrecoverableError();
     }
 
     @Override
-    public boolean shouldSkipSegmentOnError(CommitLogReadException exception) throws IOException {
+    public boolean shouldSkipSegmentOnError(CommitLogReadException exception) {
         if (exception.permissible) {
             LOGGER.error("Encountered a permissible exception during log replay", exception);
         }
@@ -316,7 +316,8 @@ public class CommitLogReadHandlerImpl implements CommitLogReadHandler {
 
         KeyValueSchema keyValueSchema = schemaHolder.getKeyValueSchema(keyspaceTable);
         if (keyValueSchema == null) {
-            LOGGER.warn("Unable to get KeyValueSchema for table {}. It might have been deleted or CDC disabled.", keyspaceTable.toString());
+            LOGGER.warn("Handling partition deletion and unable to get KeyValueSchema for table {}. It might have been deleted or CDC disabled.",
+                    keyspaceTable.toString());
             return;
         }
 
@@ -332,14 +333,14 @@ public class CommitLogReadHandlerImpl implements CommitLogReadHandler {
         // to differentiate deleted columns from unmodified columns, we populate the deleted columns
         // with null value and timestamps
         TableMetadata tableMetadata = keyValueSchema.tableMetadata();
-        List<ColumnMetadata> clusteringColumns = tableMetadata.getClusteringColumns();
+        Set<ColumnMetadata> clusteringColumns = tableMetadata.getClusteringColumns().keySet();
         if (!clusteringColumns.isEmpty()) {
             throw new CassandraConnectorSchemaException("Uh-oh... clustering key should not exist for partition deletion");
         }
-        List<ColumnMetadata> columns = tableMetadata.getColumns();
+        Collection<ColumnMetadata> columns = tableMetadata.getColumns().values();
         columns.removeAll(tableMetadata.getPartitionKey());
         for (ColumnMetadata cm : columns) {
-            String name = cm.getName();
+            String name = cm.getName().toString();
             long deletionTs = pu.deletionInfo().getPartitionDeletion().markedForDeleteAt();
             CellData cellData = new CellData(name, null, deletionTs, CellData.ColumnType.REGULAR);
             after.addCell(cellData);
@@ -366,10 +367,10 @@ public class CommitLogReadHandlerImpl implements CommitLogReadHandler {
      *      (4) Assemble a {@link Record} object from the populated data and queue the record
      */
     private void handleRowModifications(Row row, RowType rowType, PartitionUpdate pu, OffsetPosition offsetPosition, KeyspaceTable keyspaceTable) {
-
         KeyValueSchema keyValueSchema = schemaHolder.getKeyValueSchema(keyspaceTable);
         if (keyValueSchema == null) {
-            LOGGER.warn("Unable to get KeyValueSchema for table {}. It might have been deleted or CDC disabled.", keyspaceTable.toString());
+            LOGGER.warn("Handling row modifications and unable to get KeyValueSchema for table {}. It might have been deleted or CDC disabled.",
+                    keyspaceTable.toString());
             return;
         }
         Schema keySchema = keyValueSchema.keySchema();
@@ -443,10 +444,10 @@ public class CommitLogReadHandlerImpl implements CommitLogReadHandler {
                 try {
                     Object value;
                     Object deletionTs = null;
-                    AbstractType abstractType = cd.type;
+                    AbstractType<?> abstractType = cd.type;
                     if (abstractType.isCollection() && abstractType.isMultiCell()) {
                         ComplexColumnData ccd = row.getComplexColumnData(cd);
-                        value = CassandraTypeDeserializer.deserialize((CollectionType) abstractType, ccd);
+                        value = CassandraTypeDeserializer.deserialize((CollectionType<?>) abstractType, ccd);
                     }
                     else {
                         org.apache.cassandra.db.rows.Cell cell = row.getCell(cd);
@@ -469,10 +470,10 @@ public class CommitLogReadHandlerImpl implements CommitLogReadHandler {
             // the column definitions for the deleted columns. In order to differentiate deleted columns from
             // unmodified columns, we populate the deleted columns with null value and timestamps.
             TableMetadata tableMetadata = schema.tableMetadata();
-            List<ColumnMetadata> columns = tableMetadata.getColumns();
+            List<ColumnMetadata> columns = new ArrayList<>(tableMetadata.getColumns().values());
             columns.removeAll(tableMetadata.getPrimaryKey());
             for (ColumnMetadata cm : columns) {
-                String name = cm.getName();
+                String name = cm.getName().toString();
                 long deletionTs = row.deletion().time().markedForDeleteAt();
                 CellData cellData = new CellData(name, null, deletionTs, CellData.ColumnType.REGULAR);
                 after.addCell(cellData);

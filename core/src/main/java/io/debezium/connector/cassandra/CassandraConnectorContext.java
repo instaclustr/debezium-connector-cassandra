@@ -11,8 +11,6 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
-import org.apache.cassandra.config.DatabaseDescriptor;
-import org.apache.cassandra.config.Schema;
 import org.apache.kafka.clients.producer.KafkaProducer;
 
 import io.debezium.connector.base.ChangeEventQueue;
@@ -28,25 +26,30 @@ public class CassandraConnectorContext extends CdcSourceTaskContext {
     private final CassandraClient cassandraClient;
     private final List<ChangeEventQueue<Event>> queues;
     private final KafkaProducer kafkaProducer;
-    private final AbstractSchemaHolder schemaHolder;
+    private final SchemaHolder schemaHolder;
     private final OffsetWriter offsetWriter;
     private final Set<String> erroneousCommitLogs;
+    private final AbstractSchemaChangeListener schemaChangeListener;
 
-    public CassandraConnectorContext(CassandraConnectorConfig config, SchemaHolderProvider schemaHolderProvider) throws Exception {
+    public CassandraConnectorContext(CassandraConnectorConfig config,
+                                     SchemaLoader schemaLoader,
+                                     SchemaChangeListenerProvider schemaChangeListenerProvider)
+            throws Exception {
 
         super(config.getContextName(), config.getLogicalName(), Collections::emptySet);
         this.config = config;
 
         try {
-
             // Create a HashSet to record names of CommitLog Files which are not successfully read or streamed.
             this.erroneousCommitLogs = ConcurrentHashMap.newKeySet();
 
             // Loading up DDL schemas from disk
-            loadDdlFromDisk(this.config.cassandraConfig());
+            schemaLoader.load(this.config.cassandraConfig());
+
+            this.schemaChangeListener = schemaChangeListenerProvider.provide(this.config);
 
             // Setting up Cassandra driver
-            this.cassandraClient = new CassandraClient(this.config);
+            this.cassandraClient = new CassandraClient(schemaChangeListener);
 
             // Setting up change event queues
             this.queues = new ArrayList<>();
@@ -65,7 +68,7 @@ public class CassandraConnectorContext extends CdcSourceTaskContext {
             this.kafkaProducer = new KafkaProducer(this.config.getKafkaConfigs());
 
             // Setting up schema holder ...
-            this.schemaHolder = schemaHolderProvider.provide(this.cassandraClient, this.config);
+            this.schemaHolder = schemaChangeListener.getSchemaHolder();
 
             // Setting up a file-based offset manager ...
             this.offsetWriter = new FileOffsetWriter(this.config.offsetBackingStoreDir());
@@ -78,24 +81,7 @@ public class CassandraConnectorContext extends CdcSourceTaskContext {
 
     }
 
-    /**
-     * Initialize database using cassandra.yml config file. If initialization is successful,
-     * load up non-system keyspace schema definitions from Cassandra.
-     *
-     * @param yamlConfig the main config file path of a cassandra node
-     */
-    public void loadDdlFromDisk(String yamlConfig) {
-        System.setProperty("cassandra.config", "file:///" + yamlConfig);
-        if (!DatabaseDescriptor.isDaemonInitialized() && !DatabaseDescriptor.isToolInitialized()) {
-            DatabaseDescriptor.toolInitialization();
-            Schema.instance.loadFromDisk(false);
-        }
-    }
-
     public void cleanUp() {
-        if (this.schemaHolder != null) {
-            this.schemaHolder.close();
-        }
         if (this.cassandraClient != null) {
             this.cassandraClient.close();
         }
@@ -124,7 +110,7 @@ public class CassandraConnectorContext extends CdcSourceTaskContext {
         return offsetWriter;
     }
 
-    public AbstractSchemaHolder getSchemaHolder() {
+    public SchemaHolder getSchemaHolder() {
         return schemaHolder;
     }
 

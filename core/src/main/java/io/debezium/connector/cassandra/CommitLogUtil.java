@@ -26,6 +26,8 @@ public final class CommitLogUtil {
 
     private static final Pattern FILENAME_REGEX_PATTERN = Pattern.compile("CommitLog-\\d+-(\\d+).log");
 
+    private static final Pattern FILENAME_INDEX_REGEX_PATTERN = Pattern.compile("CommitLog-\\d+-(\\d+)_cdc.idx");
+
     private CommitLogUtil() {
     }
 
@@ -82,6 +84,18 @@ public final class CommitLogUtil {
     }
 
     /**
+     * Given a directory, return an array of commit logs' marker files in this directory.
+     * If the directory does not contain any commit logs, an empty array is returned.
+     */
+    public static File[] getIndexes(File directory) {
+        if (!directory.isDirectory()) {
+            throw new IllegalArgumentException("Given directory does not exist: " + directory);
+        }
+
+        return directory.listFiles(f -> f.isFile() && FILENAME_INDEX_REGEX_PATTERN.matcher(f.getName()).matches());
+    }
+
+    /**
      * Comparing two commit log files provided the {@link File} instances;
      * Returns 0 if they are the same, -1 if first file is older, 1 if first file is newer.
      */
@@ -89,26 +103,35 @@ public final class CommitLogUtil {
         if (file1.equals(file2)) {
             return 0;
         }
-        long ts1 = extractTimestamp(file1.getName());
-        long ts2 = extractTimestamp(file2.getName());
+        long ts1 = extractTimestamp(file1.getName(), FILENAME_REGEX_PATTERN);
+        long ts2 = extractTimestamp(file2.getName(), FILENAME_REGEX_PATTERN);
+        return Long.compare(ts1, ts2);
+    }
+
+    public static int compareCommitLogs(String file1, String file2) {
+        if (file1.equals(file2)) {
+            return 0;
+        }
+        long ts1 = extractTimestamp(file1, FILENAME_REGEX_PATTERN);
+        long ts2 = extractTimestamp(file2, FILENAME_REGEX_PATTERN);
         return Long.compare(ts1, ts2);
     }
 
     /**
-     * Comparing two commit log files provided the file names.
+     * Comparing two commit log files provided the {@link File} instances;
      * Returns 0 if they are the same, -1 if first file is older, 1 if first file is newer.
      */
-    public static int compareCommitLogs(String filename1, String filename2) {
-        if (filename1.equals(filename2)) {
+    public static int compareCommitLogsIndexes(File file1, File file2) {
+        if (file1.equals(file2)) {
             return 0;
         }
-        long ts1 = extractTimestamp(filename1);
-        long ts2 = extractTimestamp(filename2);
+        long ts1 = extractTimestamp(file1.getName(), FILENAME_INDEX_REGEX_PATTERN);
+        long ts2 = extractTimestamp(file2.getName(), FILENAME_INDEX_REGEX_PATTERN);
         return Long.compare(ts1, ts2);
     }
 
-    private static long extractTimestamp(String commitLogFileName) {
-        Matcher filenameMatcher = FILENAME_REGEX_PATTERN.matcher(commitLogFileName);
+    private static long extractTimestamp(String commitLogFileName, Pattern pattern) {
+        Matcher filenameMatcher = pattern.matcher(commitLogFileName);
         if (!filenameMatcher.matches()) {
             throw new CassandraConnectorDataException("Cannot extract timestamp because " + commitLogFileName + " does not appear to be a CommitLog");
         }

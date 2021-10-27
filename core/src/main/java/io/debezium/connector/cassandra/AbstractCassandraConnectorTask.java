@@ -42,7 +42,8 @@ public abstract class AbstractCassandraConnectorTask {
     private ProcessorGroup processorGroup;
     private Server httpServer;
     private JmxReporter jmxReporter;
-    private SchemaHolderProvider schemaHolderProvider;
+    private SchemaLoader schemaLoader;
+    private SchemaChangeListenerProvider schemaChangeListenerProvider;
 
     protected static void main(String[] args,
                                Function<CassandraConnectorConfig, AbstractCassandraConnectorTask> taskRunner)
@@ -58,9 +59,12 @@ public abstract class AbstractCassandraConnectorTask {
         }
     }
 
-    public AbstractCassandraConnectorTask(CassandraConnectorConfig config, SchemaHolderProvider schemaHolderProvider) {
+    public AbstractCassandraConnectorTask(CassandraConnectorConfig config,
+                                          SchemaLoader schemaLoader,
+                                          SchemaChangeListenerProvider schemaChangeListener) {
         this.config = config;
-        this.schemaHolderProvider = schemaHolderProvider;
+        this.schemaLoader = schemaLoader;
+        this.schemaChangeListenerProvider = schemaChangeListener;
     }
 
     protected abstract Logger logger();
@@ -93,7 +97,7 @@ public abstract class AbstractCassandraConnectorTask {
             }
 
             logger().info("Initializing Cassandra connector task context ...");
-            taskContext = new CassandraConnectorContext(config, schemaHolderProvider);
+            taskContext = new CassandraConnectorContext(config, schemaLoader, schemaChangeListenerProvider);
 
             logger().info("Starting processor group ...");
             processorGroup = initProcessorGroup(taskContext);

@@ -11,15 +11,16 @@ import java.util.List;
 import org.apache.cassandra.db.marshal.AbstractType;
 import org.apache.cassandra.db.marshal.TupleType;
 
-import com.datastax.driver.core.DataType;
+import com.datastax.oss.driver.api.core.type.DataType;
+import com.datastax.oss.driver.internal.core.type.DefaultTupleType;
 
 import io.debezium.connector.cassandra.transforms.CassandraTypeConverter;
 
 public class TupleTypeConverter implements TypeConverter<TupleType> {
     @Override
     public TupleType convert(DataType dataType) {
-        com.datastax.driver.core.TupleType tupleDataType = (com.datastax.driver.core.TupleType) dataType;
-        List<DataType> innerTypes = tupleDataType.getComponentTypes();
+        DefaultTupleType tupleType = (DefaultTupleType) dataType;
+        List<DataType> innerTypes = tupleType.getComponentTypes();
         List<AbstractType<?>> innerAbstractTypes = new ArrayList<>(innerTypes.size());
         for (DataType dt : innerTypes) {
             innerAbstractTypes.add(CassandraTypeConverter.convert(dt));

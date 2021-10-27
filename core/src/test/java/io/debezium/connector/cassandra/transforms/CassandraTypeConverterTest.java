@@ -8,6 +8,7 @@ package io.debezium.connector.cassandra.transforms;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 import org.apache.cassandra.cql3.FieldIdentifier;
@@ -36,17 +37,17 @@ import org.apache.cassandra.db.marshal.UTF8Type;
 import org.apache.cassandra.db.marshal.UUIDType;
 import org.junit.Assert;
 import org.junit.Test;
-import org.mockito.Mockito;
 
-import com.datastax.driver.core.DataType;
-import com.datastax.driver.core.TupleType;
-import com.datastax.driver.core.UserType;
+import com.datastax.oss.driver.api.core.CqlIdentifier;
+import com.datastax.oss.driver.api.core.type.DataType;
+import com.datastax.oss.driver.api.core.type.DataTypes;
+import com.datastax.oss.driver.internal.core.type.DefaultUserDefinedType;
 
 public class CassandraTypeConverterTest {
 
     @Test
     public void testAscii() {
-        DataType asciiType = DataType.ascii();
+        DataType asciiType = DataTypes.ASCII;
         AbstractType<?> convertedType = CassandraTypeConverter.convert(asciiType);
 
         AsciiType expectedType = AsciiType.instance;
@@ -56,7 +57,7 @@ public class CassandraTypeConverterTest {
 
     @Test
     public void testBlob() {
-        DataType blobType = DataType.blob();
+        DataType blobType = DataTypes.BLOB;
         AbstractType<?> convertedType = CassandraTypeConverter.convert(blobType);
 
         BytesType expectedType = BytesType.instance;
@@ -66,7 +67,7 @@ public class CassandraTypeConverterTest {
 
     @Test
     public void testBigInt() {
-        DataType bigIntType = DataType.bigint();
+        DataType bigIntType = DataTypes.BIGINT;
         AbstractType<?> convertedType = CassandraTypeConverter.convert(bigIntType);
 
         LongType expectedType = LongType.instance;
@@ -76,7 +77,7 @@ public class CassandraTypeConverterTest {
 
     @Test
     public void testBoolean() {
-        DataType booleanType = DataType.cboolean();
+        DataType booleanType = DataTypes.BOOLEAN;
         AbstractType<?> convertedType = CassandraTypeConverter.convert(booleanType);
 
         BooleanType expectedType = BooleanType.instance;
@@ -86,7 +87,7 @@ public class CassandraTypeConverterTest {
 
     @Test
     public void testCounter() {
-        DataType counterType = DataType.counter();
+        DataType counterType = DataTypes.COUNTER;
         AbstractType<?> convertedType = CassandraTypeConverter.convert(counterType);
 
         CounterColumnType expectedType = CounterColumnType.instance;
@@ -96,7 +97,7 @@ public class CassandraTypeConverterTest {
 
     @Test
     public void testDate() {
-        DataType dateType = DataType.date();
+        DataType dateType = DataTypes.DATE;
         AbstractType<?> convertedType = CassandraTypeConverter.convert(dateType);
 
         SimpleDateType expectedType = SimpleDateType.instance;
@@ -106,7 +107,7 @@ public class CassandraTypeConverterTest {
 
     @Test
     public void testDecimal() {
-        DataType decimalType = DataType.decimal();
+        DataType decimalType = DataTypes.DECIMAL;
         AbstractType<?> convertedType = CassandraTypeConverter.convert(decimalType);
 
         DecimalType expectedType = DecimalType.instance;
@@ -116,7 +117,7 @@ public class CassandraTypeConverterTest {
 
     @Test
     public void testDouble() {
-        DataType doubleType = DataType.cdouble();
+        DataType doubleType = DataTypes.DOUBLE;
         AbstractType<?> convertedType = CassandraTypeConverter.convert(doubleType);
 
         DoubleType expectedType = DoubleType.instance;
@@ -126,7 +127,7 @@ public class CassandraTypeConverterTest {
 
     @Test
     public void testDuration() {
-        DataType durationType = DataType.duration();
+        DataType durationType = DataTypes.DURATION;
         AbstractType<?> convertedType = CassandraTypeConverter.convert(durationType);
 
         DurationType expectedType = DurationType.instance;
@@ -136,7 +137,7 @@ public class CassandraTypeConverterTest {
 
     @Test
     public void testFloat() {
-        DataType floatType = DataType.cfloat();
+        DataType floatType = DataTypes.FLOAT;
         AbstractType<?> convertedType = CassandraTypeConverter.convert(floatType);
 
         FloatType expectedType = FloatType.instance;
@@ -146,7 +147,7 @@ public class CassandraTypeConverterTest {
 
     @Test
     public void testInet() {
-        DataType inetType = DataType.inet();
+        DataType inetType = DataTypes.INET;
         AbstractType<?> convertedType = CassandraTypeConverter.convert(inetType);
 
         InetAddressType expectedType = InetAddressType.instance;
@@ -156,7 +157,7 @@ public class CassandraTypeConverterTest {
 
     @Test
     public void testInt() {
-        DataType intType = DataType.cint();
+        DataType intType = DataTypes.INT;
         AbstractType<?> convertedType = CassandraTypeConverter.convert(intType);
 
         Int32Type expectedType = Int32Type.instance;
@@ -168,14 +169,14 @@ public class CassandraTypeConverterTest {
     public void testList() {
         // list of ints
         // test non-frozen
-        DataType listType = DataType.list(DataType.cint(), false);
+        DataType listType = DataTypes.listOf(DataTypes.INT, false);
         AbstractType<?> convertedType = CassandraTypeConverter.convert(listType);
 
         ListType<?> expectedType = ListType.getInstance(Int32Type.instance, true);
         Assert.assertEquals(expectedType, convertedType);
 
         // test frozen
-        listType = DataType.list(DataType.cint(), true);
+        listType = DataTypes.listOf(DataTypes.INT, true);
         convertedType = CassandraTypeConverter.convert(listType);
         expectedType = ListType.getInstance(Int32Type.instance, false);
         Assert.assertEquals(expectedType, convertedType);
@@ -186,14 +187,14 @@ public class CassandraTypeConverterTest {
     public void testMap() {
         // map from ASCII to Double
         // test non-frozen
-        DataType mapType = DataType.map(DataType.ascii(), DataType.cdouble());
+        DataType mapType = DataTypes.mapOf(DataTypes.ASCII, DataTypes.DOUBLE, false);
         AbstractType<?> convertedType = CassandraTypeConverter.convert(mapType);
 
         MapType<?, ?> expectedType = MapType.getInstance(AsciiType.instance, DoubleType.instance, true);
         Assert.assertEquals(expectedType, convertedType);
 
         // test frozen
-        mapType = DataType.map(DataType.ascii(), DataType.cdouble(), true);
+        mapType = DataTypes.mapOf(DataTypes.ASCII, DataTypes.DOUBLE, true);
         convertedType = CassandraTypeConverter.convert(mapType);
         expectedType = MapType.getInstance(AsciiType.instance, DoubleType.instance, false);
         Assert.assertEquals(expectedType, convertedType);
@@ -204,14 +205,14 @@ public class CassandraTypeConverterTest {
     public void testSet() {
         // set of floats
         // test non-frozen
-        DataType setType = DataType.set(DataType.cfloat(), false);
+        DataType setType = DataTypes.setOf(DataTypes.FLOAT, false);
         AbstractType<?> convertedType = CassandraTypeConverter.convert(setType);
 
         SetType<?> expectedType = SetType.getInstance(FloatType.instance, true);
         Assert.assertEquals(expectedType, convertedType);
 
         // test frozen
-        setType = DataType.set(DataType.cfloat(), true);
+        setType = DataTypes.setOf(DataTypes.FLOAT, true);
         convertedType = CassandraTypeConverter.convert(setType);
         expectedType = SetType.getInstance(FloatType.instance, false);
         Assert.assertEquals(expectedType, convertedType);
@@ -221,7 +222,7 @@ public class CassandraTypeConverterTest {
 
     @Test
     public void testSmallInt() {
-        DataType smallIntType = DataType.smallint();
+        DataType smallIntType = DataTypes.SMALLINT;
         AbstractType<?> convertedType = CassandraTypeConverter.convert(smallIntType);
 
         ShortType expectedType = ShortType.instance;
@@ -231,7 +232,7 @@ public class CassandraTypeConverterTest {
 
     @Test
     public void testText() {
-        DataType textType = DataType.text();
+        DataType textType = DataTypes.TEXT;
         AbstractType<?> convertedType = CassandraTypeConverter.convert(textType);
 
         UTF8Type expectedType = UTF8Type.instance;
@@ -241,7 +242,7 @@ public class CassandraTypeConverterTest {
 
     @Test
     public void testTime() {
-        DataType timeType = DataType.time();
+        DataType timeType = DataTypes.TIME;
         AbstractType<?> convertedType = CassandraTypeConverter.convert(timeType);
 
         TimeType expectedType = TimeType.instance;
@@ -251,7 +252,7 @@ public class CassandraTypeConverterTest {
 
     @Test
     public void testTimestamp() {
-        DataType timestampType = DataType.timestamp();
+        DataType timestampType = DataTypes.TIMESTAMP;
         AbstractType<?> convertedType = CassandraTypeConverter.convert(timestampType);
 
         TimestampType expectedType = TimestampType.instance;
@@ -261,7 +262,7 @@ public class CassandraTypeConverterTest {
 
     @Test
     public void testTimeUUID() {
-        DataType timeUUID = DataType.timeuuid();
+        DataType timeUUID = DataTypes.TIMEUUID;
         AbstractType<?> convertedType = CassandraTypeConverter.convert(timeUUID);
 
         TimeUUIDType expectedType = TimeUUIDType.instance;
@@ -271,7 +272,7 @@ public class CassandraTypeConverterTest {
 
     @Test
     public void testTinyInt() {
-        DataType tinyInt = DataType.tinyint();
+        DataType tinyInt = DataTypes.TINYINT;
         AbstractType<?> convertedType = CassandraTypeConverter.convert(tinyInt);
 
         ByteType expectedType = ByteType.instance;
@@ -284,7 +285,7 @@ public class CassandraTypeConverterTest {
         // tuple containing timestamp and smallint.
         // tuples are always frozen, so we don't need to test that.
         // we don't care about the protocol version or the codec registry.
-        DataType tupleType = TupleType.of(null, null, DataType.timestamp(), DataType.smallint());
+        DataType tupleType = DataTypes.tupleOf(DataTypes.TIMESTAMP, DataTypes.SMALLINT);
         AbstractType<?> convertedType = CassandraTypeConverter.convert(tupleType);
 
         List<AbstractType<?>> innerAbstractTypes = new ArrayList<>(2);
@@ -297,50 +298,47 @@ public class CassandraTypeConverterTest {
 
     @Test
     public void testUdt() {
-        // we can't create a UserType directly, and there isn't really a good way to make one some other way, so...
-        // mock it!
-        UserType userType = Mockito.mock(UserType.class);
-        Mockito.when(userType.getName()).thenReturn(DataType.Name.UDT);
-        Mockito.when(userType.getTypeName()).thenReturn("FooType");
-        Mockito.when(userType.getKeyspace()).thenReturn("barspace");
-        List<String> fieldNames = new ArrayList<>();
-        fieldNames.add("asciiField");
-        fieldNames.add("doubleField");
-        Mockito.when(userType.getFieldNames()).thenReturn(fieldNames);
-        Mockito.when(userType.getFieldType("asciiField")).thenReturn(DataType.ascii());
-        Mockito.when(userType.getFieldType("doubleField")).thenReturn(DataType.cdouble());
-        Mockito.when(userType.isFrozen()).thenReturn(false, true); // cheaty way to test non-frozen and then frozen path.
+        DefaultUserDefinedType nonFrozenUserDefinedType = new DefaultUserDefinedType(CqlIdentifier.fromCql("ks1"),
+                CqlIdentifier.fromInternal("FooType"),
+                false,
+                Collections.singletonList(CqlIdentifier.fromCql("field1")),
+                Collections.singletonList(DataTypes.TEXT));
 
-        ByteBuffer expectedTypeName = ByteBuffer.wrap("FooType".getBytes(Charset.defaultCharset()));
+        DefaultUserDefinedType frozenUserDefinedType = new DefaultUserDefinedType(CqlIdentifier.fromCql("ks1"),
+                CqlIdentifier.fromInternal("FooType"),
+                true,
+                Collections.singletonList(CqlIdentifier.fromCql("field1")),
+                Collections.singletonList(DataTypes.TEXT));
+
+        ByteBuffer expectedTypeName = UTF8Type.instance.decompose("FooType");
         List<FieldIdentifier> expectedFieldIdentifiers = new ArrayList<>();
-        expectedFieldIdentifiers.add(new FieldIdentifier(ByteBuffer.wrap("asciiField".getBytes(Charset.defaultCharset()))));
-        expectedFieldIdentifiers.add(new FieldIdentifier(ByteBuffer.wrap("doubleField".getBytes(Charset.defaultCharset()))));
+        expectedFieldIdentifiers.add(new FieldIdentifier(ByteBuffer.wrap("field1".getBytes(Charset.defaultCharset()))));
         List<AbstractType<?>> expectedFieldTypes = new ArrayList<>();
-        expectedFieldTypes.add(AsciiType.instance);
-        expectedFieldTypes.add(DoubleType.instance);
+        expectedFieldTypes.add(UTF8Type.instance);
 
         // non-frozen
-        org.apache.cassandra.db.marshal.UserType expectedAbstractType = new org.apache.cassandra.db.marshal.UserType("barspace",
+        org.apache.cassandra.db.marshal.UserType expectedAbstractType = new org.apache.cassandra.db.marshal.UserType("ks1",
                 expectedTypeName,
                 expectedFieldIdentifiers,
                 expectedFieldTypes,
                 true);
-        AbstractType<?> convertedType = CassandraTypeConverter.convert(userType);
+        AbstractType<?> convertedType = CassandraTypeConverter.convert(nonFrozenUserDefinedType);
         Assert.assertEquals(expectedAbstractType, convertedType);
 
         // frozen
-        expectedAbstractType = new org.apache.cassandra.db.marshal.UserType("barspace",
+        expectedAbstractType = new org.apache.cassandra.db.marshal.UserType("ks1",
                 expectedTypeName,
                 expectedFieldIdentifiers,
                 expectedFieldTypes,
-                false);
-        convertedType = CassandraTypeConverter.convert(userType);
+                true).freeze();
+        convertedType = CassandraTypeConverter.convert(frozenUserDefinedType);
         Assert.assertEquals(expectedAbstractType, convertedType);
     }
 
     @Test
     public void testUUID() {
-        DataType uuid = DataType.uuid();
+        DataType uuid = DataTypes.UUID;
+
         AbstractType<?> convertedType = CassandraTypeConverter.convert(uuid);
 
         UUIDType expectedType = UUIDType.instance;

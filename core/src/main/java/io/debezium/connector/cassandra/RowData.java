@@ -16,8 +16,8 @@ import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Struct;
 
-import com.datastax.driver.core.ColumnMetadata;
-import com.datastax.driver.core.TableMetadata;
+import com.datastax.oss.driver.api.core.metadata.schema.ColumnMetadata;
+import com.datastax.oss.driver.api.core.metadata.schema.TableMetadata;
 
 /**
  * Row-level data about the source event. Contains a map where the key is the table column
@@ -70,10 +70,10 @@ public class RowData implements KafkaRecord {
      */
     static Schema rowSchema(TableMetadata tm) {
         SchemaBuilder schemaBuilder = SchemaBuilder.struct().name(Record.AFTER);
-        for (ColumnMetadata cm : tm.getColumns()) {
+        for (ColumnMetadata cm : tm.getColumns().values()) {
             Schema optionalCellSchema = CellData.cellSchema(cm, true);
             if (optionalCellSchema != null) {
-                schemaBuilder.field(cm.getName(), optionalCellSchema);
+                schemaBuilder.field(cm.getName().toString(), optionalCellSchema);
             }
         }
         return schemaBuilder.build();

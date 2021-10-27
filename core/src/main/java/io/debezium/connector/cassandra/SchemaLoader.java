@@ -5,6 +5,6 @@
  */
 package io.debezium.connector.cassandra;
 
-public interface SchemaHolderProvider {
-    SchemaHolder provide(CassandraClient cassandraClient, CassandraConnectorConfig config);
+public interface SchemaLoader {
+    void load(String cassandraYaml);
 }

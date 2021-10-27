@@ -9,8 +9,8 @@ import org.apache.cassandra.db.marshal.AbstractType;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
 
-import com.datastax.driver.core.ColumnMetadata;
-import com.datastax.driver.core.TableMetadata;
+import com.datastax.oss.driver.api.core.metadata.schema.ColumnMetadata;
+import com.datastax.oss.driver.api.core.metadata.schema.TableMetadata;
 
 import io.debezium.connector.SourceInfoStructMaker;
 import io.debezium.connector.cassandra.exceptions.CassandraConnectorSchemaException;
@@ -55,7 +55,7 @@ public class KeyValueSchema {
             AbstractType<?> convertedType = CassandraTypeConverter.convert(cm.getType());
             Schema colSchema = CassandraTypeDeserializer.getSchemaBuilder(convertedType).build();
             if (colSchema != null) {
-                schemaBuilder.field(cm.getName(), colSchema);
+                schemaBuilder.field(cm.getName().toString(), colSchema);
             }
         }
         return schemaBuilder.build();
@@ -74,11 +74,11 @@ public class KeyValueSchema {
     }
 
     private static String getKeyName(String kafkaTopicPrefix, TableMetadata tm) {
-        return kafkaTopicPrefix + "." + tm.getKeyspace().getName() + "." + tm.getName() + ".Key";
+        return kafkaTopicPrefix + "." + tm.getKeyspace() + "." + tm.getName() + ".Key";
     }
 
     private static String getValueName(String kafkaTopicPrefix, TableMetadata tm) {
-        return kafkaTopicPrefix + "." + tm.getKeyspace().getName() + "." + tm.getName() + ".Envelope";
+        return kafkaTopicPrefix + "." + tm.getKeyspace() + "." + tm.getName() + ".Envelope";
     }
 
     /**

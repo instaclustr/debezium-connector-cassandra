@@ -7,6 +7,7 @@ package io.debezium.connector.cassandra;
 
 import java.io.IOException;
 import java.time.Duration;
+import java.util.Collection;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
@@ -15,19 +16,23 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import org.apache.cassandra.config.DatabaseDescriptor;
+import org.apache.cassandra.db.marshal.CounterColumnType;
+import org.apache.cassandra.db.marshal.LongType;
 import org.apache.kafka.connect.data.Schema;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.datastax.driver.core.ColumnMetadata;
-import com.datastax.driver.core.ConsistencyLevel;
-import com.datastax.driver.core.DataType;
-import com.datastax.driver.core.ResultSet;
-import com.datastax.driver.core.Row;
-import com.datastax.driver.core.TableMetadata;
-import com.datastax.driver.core.querybuilder.BuiltStatement;
-import com.datastax.driver.core.querybuilder.QueryBuilder;
-import com.datastax.driver.core.querybuilder.Select;
+import com.datastax.oss.driver.api.core.ConsistencyLevel;
+import com.datastax.oss.driver.api.core.DefaultConsistencyLevel;
+import com.datastax.oss.driver.api.core.cql.ResultSet;
+import com.datastax.oss.driver.api.core.cql.Row;
+import com.datastax.oss.driver.api.core.cql.SimpleStatement;
+import com.datastax.oss.driver.api.core.metadata.schema.ColumnMetadata;
+import com.datastax.oss.driver.api.core.metadata.schema.TableMetadata;
+import com.datastax.oss.driver.api.querybuilder.QueryBuilder;
+import com.datastax.oss.driver.api.querybuilder.select.Select;
+import com.datastax.oss.driver.api.querybuilder.select.SelectFrom;
+import com.datastax.oss.protocol.internal.ProtocolConstants;
 
 import io.debezium.DebeziumException;
 import io.debezium.connector.base.ChangeEventQueue;
@@ -39,7 +44,7 @@ import io.debezium.util.Collect;
  * This reader is responsible for initial bootstrapping of a table,
  * which entails converting each row into a change event and enqueueing
  * that event to the {@link ChangeEventQueue}.
- *
+ * <p>
  * IMPORTANT: Currently, only when a snapshot is completed will the OffsetWriter
  * record the table in the offset.properties file (with filename "" and position
  * -1). This means if the SnapshotProcessor is terminated midway, upon restart
@@ -49,14 +54,16 @@ public class SnapshotProcessor extends AbstractProcessor {
     private static final Logger LOGGER = LoggerFactory.getLogger(SnapshotProcessor.class);
 
     private static final String NAME = "Snapshot Processor";
-    private static final String CASSANDRA_NOW_UNIXTIMESTAMP = "UNIXTIMESTAMPOF(NOW())";
+    private static final String CASSANDRA_NOW_UNIXTIMESTAMP = "TOUNIXTIMESTAMP(NOW())";
     private static final String EXECUTION_TIME_ALIAS = "execution_time";
-    private static final Set<DataType.Name> collectionTypes = Collect.unmodifiableSet(DataType.Name.LIST, DataType.Name.SET, DataType.Name.MAP);
+    private static final Set<Integer> collectionTypes = Collect.unmodifiableSet(ProtocolConstants.DataType.LIST,
+            ProtocolConstants.DataType.SET,
+            ProtocolConstants.DataType.MAP);
 
     private final CassandraClient cassandraClient;
     private final List<ChangeEventQueue<Event>> queues;
     private final OffsetWriter offsetWriter;
-    private final AbstractSchemaHolder schemaHolder;
+    private final SchemaHolder schemaHolder;
     private final RecordMaker recordMaker;
     private final CassandraConnectorConfig.SnapshotMode snapshotMode;
     private final ConsistencyLevel consistencyLevel;
@@ -149,9 +156,8 @@ public class SnapshotProcessor extends AbstractProcessor {
      */
     private void takeTableSnapshot(TableMetadata tableMetadata) throws IOException {
         try {
-            BuiltStatement statement = generateSnapshotStatement(tableMetadata);
-            statement.setConsistencyLevel(consistencyLevel);
-            LOGGER.info("Executing snapshot query '{}' with consistency level {}", statement.getQueryString(), statement.getConsistencyLevel());
+            SimpleStatement statement = generateSnapshotStatement(tableMetadata).setConsistencyLevel(DefaultConsistencyLevel.valueOf(consistencyLevel.name()));
+            LOGGER.info("Executing snapshot query '{}' with consistency level {}", statement.getQuery(), statement.getConsistencyLevel());
             ResultSet resultSet = cassandraClient.execute(statement);
             LOGGER.info("Executed snapshot query for table {}", tableName(tableMetadata));
             processResultSet(tableMetadata, resultSet);
@@ -160,35 +166,47 @@ public class SnapshotProcessor extends AbstractProcessor {
             throw e;
         }
         catch (Exception e) {
-            throw new DebeziumException(String.format("Failed to snapshot table %s in keyspace %s", tableMetadata.getName(), tableMetadata.getKeyspace().getName()), e);
+            throw new DebeziumException(String.format("Failed to snapshot table %s in keyspace %s", tableMetadata.getName(), tableMetadata.getKeyspace()), e);
         }
     }
 
     /**
      * Build the SELECT query statement for execution. For every non-primary-key column, the TTL, WRITETIME, and execution
      * time are also queried.
-     *
+     * <p>
      * For example, a table t with columns a, b, and c, where A is the partition key, B is the clustering key, and C is a
      * regular column, looks like the following:
      * <pre>
      *     {@code SELECT now() as execution_time, a, b, c, TTL(c) as c_ttl, WRITETIME(c) as c_writetime FROM t;}
      * </pre>
      */
-    private static BuiltStatement generateSnapshotStatement(TableMetadata tableMetadata) {
-        List<String> allCols = tableMetadata.getColumns().stream().map(ColumnMetadata::getName).collect(Collectors.toList());
-        Set<String> primaryCols = tableMetadata.getPrimaryKey().stream().map(ColumnMetadata::getName).collect(Collectors.toSet());
-        List<String> collectionCols = tableMetadata.getColumns().stream().filter(cm -> collectionTypes.contains(cm.getType().getName()))
-                .map(ColumnMetadata::getName).collect(Collectors.toList());
+    private static SimpleStatement generateSnapshotStatement(TableMetadata tableMetadata) {
+        List<String> allCols = tableMetadata.getColumns().values().stream().map(cmd -> cmd.getName().asInternal()).collect(Collectors.toList());
+        Set<String> primaryCols = tableMetadata.getPrimaryKey().stream().map(cmd -> cmd.getName().asInternal()).collect(Collectors.toSet());
+        List<String> collectionCols = tableMetadata.getColumns()
+                .values()
+                .stream()
+                .filter(cm -> collectionTypes.contains(cm.getType().getProtocolCode()))
+                .map(cmd -> cmd.getName().asInternal()).collect(Collectors.toList());
 
-        Select.Selection selection = QueryBuilder.select().raw(CASSANDRA_NOW_UNIXTIMESTAMP).as(EXECUTION_TIME_ALIAS);
+        SelectFrom selection = QueryBuilder.selectFrom(tableMetadata.getKeyspace(), tableMetadata.getName());
+        assert !allCols.isEmpty();
+        Select select = null;
+
         for (String col : allCols) {
-            selection.column(withQuotes(col));
+            if (select == null) {
+                select = selection.column(col);
+            }
+            else {
+                select = select.column(col);
+            }
 
             if (!primaryCols.contains(col) && !collectionCols.contains(col)) {
-                selection.ttl(withQuotes(col)).as(ttlAlias(col));
+                select = select.ttl(withQuotes(col)).as(ttlAlias(col));
             }
         }
-        return selection.from(tableMetadata.getKeyspace().getName(), tableMetadata.getName());
+
+        return select.raw(CASSANDRA_NOW_UNIXTIMESTAMP).as(EXECUTION_TIME_ALIAS).build();
     }
 
     /**
@@ -202,8 +220,8 @@ public class SnapshotProcessor extends AbstractProcessor {
         Schema keySchema = keyValueSchema.keySchema();
         Schema valueSchema = keyValueSchema.valueSchema();
 
-        Set<String> partitionKeyNames = tableMetadata.getPartitionKey().stream().map(ColumnMetadata::getName).collect(Collectors.toSet());
-        Set<String> clusteringKeyNames = tableMetadata.getClusteringColumns().stream().map(ColumnMetadata::getName).collect(Collectors.toSet());
+        Set<String> partitionKeyNames = tableMetadata.getPartitionKey().stream().map(cmd -> cmd.getName().toString()).collect(Collectors.toSet());
+        Set<String> clusteringKeyNames = tableMetadata.getClusteringColumns().keySet().stream().map(cc -> cc.getName().toString()).collect(Collectors.toSet());
 
         Iterator<Row> rowIter = resultSet.iterator();
         long rowNum = 0L;
@@ -217,7 +235,7 @@ public class SnapshotProcessor extends AbstractProcessor {
             if (isRunning()) {
                 Row row = rowIter.next();
                 Object executionTime = readExecutionTime(row);
-                RowData after = extractRowData(row, tableMetadata.getColumns(), partitionKeyNames, clusteringKeyNames, executionTime);
+                RowData after = extractRowData(row, tableMetadata.getColumns().values(), partitionKeyNames, clusteringKeyNames, executionTime);
                 // only mark offset if there are no more rows left
                 boolean markOffset = !rowIter.hasNext();
                 recordMaker.insert(DatabaseDescriptor.getClusterName(), OffsetPosition.defaultOffsetPosition(),
@@ -241,16 +259,20 @@ public class SnapshotProcessor extends AbstractProcessor {
     /**
      * This function extracts the relevant row data from {@link Row} and updates the maximum writetime for each row.
      */
-    private static RowData extractRowData(Row row, List<ColumnMetadata> columns, Set<String> partitionKeyNames, Set<String> clusteringKeyNames, Object executionTime) {
+    private static RowData extractRowData(Row row,
+                                          Collection<ColumnMetadata> columns,
+                                          Set<String> partitionKeyNames,
+                                          Set<String> clusteringKeyNames,
+                                          Object executionTime) {
         RowData rowData = new RowData();
 
         for (ColumnMetadata columnMetadata : columns) {
-            String name = columnMetadata.getName();
+            String name = columnMetadata.getName().asInternal();
             Object value = readCol(row, name, columnMetadata);
             Object deletionTs = null;
             CellData.ColumnType type = getType(name, partitionKeyNames, clusteringKeyNames);
 
-            if (type == CellData.ColumnType.REGULAR && value != null && !collectionTypes.contains(columnMetadata.getType().getName())) {
+            if (type == CellData.ColumnType.REGULAR && value != null && !collectionTypes.contains(columnMetadata.getType())) {
                 Object ttl = readColTtl(row, name);
                 if (ttl != null && executionTime != null) {
                     deletionTs = calculateDeletionTs(executionTime, ttl);
@@ -277,7 +299,7 @@ public class SnapshotProcessor extends AbstractProcessor {
     }
 
     private static Object readExecutionTime(Row row) {
-        return CassandraTypeDeserializer.deserialize(DataType.bigint(), row.getBytesUnsafe(EXECUTION_TIME_ALIAS));
+        return CassandraTypeDeserializer.deserialize(LongType.instance, row.getBytesUnsafe(EXECUTION_TIME_ALIAS));
     }
 
     private static Object readCol(Row row, String col, ColumnMetadata cm) {
@@ -285,7 +307,7 @@ public class SnapshotProcessor extends AbstractProcessor {
     }
 
     private static Object readColTtl(Row row, String col) {
-        return CassandraTypeDeserializer.deserialize(DataType.cint(), row.getBytesUnsafe(ttlAlias(col)));
+        return CassandraTypeDeserializer.deserialize(CounterColumnType.instance, row.getBytesUnsafe(ttlAlias(col)));
     }
 
     /**
@@ -304,6 +326,6 @@ public class SnapshotProcessor extends AbstractProcessor {
     }
 
     private static String tableName(TableMetadata tm) {
-        return tm.getKeyspace().getName() + "." + tm.getName();
+        return tm.getKeyspace() + "." + tm.getName();
     }
 }

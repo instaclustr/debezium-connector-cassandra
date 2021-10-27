@@ -57,7 +57,7 @@ import org.apache.kafka.connect.data.Values;
 import org.junit.Assert;
 import org.junit.Test;
 
-import com.datastax.driver.core.DataType;
+import com.datastax.oss.driver.api.core.type.DataType;
 
 /**
  * This class ONLY tests the {@link CassandraTypeDeserializer#deserialize(AbstractType, ByteBuffer)}
