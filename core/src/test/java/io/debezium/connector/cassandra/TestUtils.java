@@ -17,7 +17,6 @@ import java.util.List;
 import java.util.Properties;
 import java.util.stream.Collectors;
 
-import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.kafka.clients.producer.ProducerConfig;
 
 import com.datastax.oss.driver.api.core.CqlSession;
@@ -142,9 +141,8 @@ public class TestUtils {
      * Generate a commit log file with current timestamp in memory
      */
     public static File generateCommitLogFile() {
-        File cdcDir = new File(DatabaseDescriptor.getCDCLogLocation());
         long ts = System.currentTimeMillis();
-        return Paths.get(cdcDir.getAbsolutePath(), "CommitLog-6-" + ts + ".log").toFile();
+        return Paths.get("/tmp", "CommitLog-6-" + ts + ".log").toFile();
     }
 
     /**
