@@ -24,8 +24,13 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
+        with:
+          egress-policy: audit
+
       - name: Checkout cassandra repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           path: cassandra
       - name: Check if pull request branch exists in debezium main repository
@@ -43,26 +48,26 @@ jobs:
           done < SORTED_PULLS.txt
       - name: Checkout core repository with pull request branch
         if: ${{ steps.branch.outputs.BRANCH_FOUND == 'true' }}
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           repository: ${{ github.event.pull_request.user.login }}/debezium
           ref: ${{ github.head_ref }}
           path: core
       - name: Checkout core repository with default base branch
         if: ${{ steps.branch.outputs.BRANCH_FOUND != 'true' }}
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           repository: debezium/debezium
           ref: ${{ github.base_ref }}
           path: core
       - name: Cache Maven packages
-        uses: actions/cache@v3
+        uses: actions/cache@6f8efc29b200d32929f49075959781ed54ec270c # v3.5.0
         with:
           path: ~/.m2
           key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
           restore-keys: ${{ runner.os }}-m2
       - name: Set up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4.8.0
         with:
           distribution: 'temurin'
           java-version: 17
